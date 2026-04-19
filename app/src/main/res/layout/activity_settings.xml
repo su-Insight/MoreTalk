@@ -9,7 +9,8 @@
         android:layout_height="wrap_content"
         android:paddingTop="16dp"
         android:paddingStart="16dp"
-        android:paddingEnd="16dp">
+        android:paddingEnd="16dp"
+        android:paddingBottom="40dp">
 
         <!-- 日期样式设置 -->
         <androidx.cardview.widget.CardView

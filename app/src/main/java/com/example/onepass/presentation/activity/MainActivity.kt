@@ -922,7 +922,7 @@ class MainActivity : AppCompatActivity() {
 
         // 检查设置中是否开启了天气播报
         val prefs = getSharedPreferences("OnePassPrefs", Context.MODE_PRIVATE)
-        val weatherEnabled = prefs.getBoolean("weather_enabled", false)
+        val weatherEnabled = prefs.getBoolean("weather_enabled", true)
         if (!weatherEnabled) {
             return
         }

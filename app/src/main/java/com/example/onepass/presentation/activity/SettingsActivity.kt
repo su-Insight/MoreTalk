@@ -1,8 +1,13 @@
 package com.example.onepass.presentation.activity
 
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.view.View
 import android.widget.ImageView
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -10,12 +15,23 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.Button
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.constraintlayout.widget.ConstraintLayout
 import com.example.onepass.R
 import com.example.onepass.core.config.GlobalScaleManager
 
 class SettingsActivity : AppCompatActivity() {
+
+    private val requestHomeRoleLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        updateDefaultLauncherButtonState()
+        if (isAppDefaultLauncher()) {
+            Toast.makeText(this, "已设为默认桌面", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private lateinit var radioLunar: RadioButton
     private lateinit var radioSolar: RadioButton
@@ -23,6 +39,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var seekBarIconSize: SeekBar
     private lateinit var textIconSize: TextView
     private lateinit var btnSetDefaultLauncher: Button
+    private lateinit var btnClearDefaultLauncher: Button
 
     // new UI controls
     private lateinit var btnCommonApps: Button
@@ -72,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
         val commonAppsSet = getSharedPreferences(COMMON_APPS_PREFS, Context.MODE_PRIVATE)
             .getStringSet(KEY_COMMON_APPS, HashSet<String>())
         loadCommonApps(commonAppsSet)
+        updateDefaultLauncherButtonState()
         
         // 应用最新的缩放设置
         val scalePercentage = GlobalScaleManager.getScalePercentage(this)
@@ -85,6 +103,7 @@ class SettingsActivity : AppCompatActivity() {
         seekBarIconSize = findViewById(R.id.seekBarIconSize)
         textIconSize = findViewById(R.id.textIconSize)
         btnSetDefaultLauncher = findViewById(R.id.btnSetDefaultLauncher)
+        btnClearDefaultLauncher = ensureClearDefaultLauncherButton()
         
         // 设置缩放比例进度条的范围
         seekBarIconSize.min = 60
@@ -175,6 +194,7 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         btnSetDefaultLauncher.setOnClickListener { setAsDefaultLauncher() }
+        btnClearDefaultLauncher.setOnClickListener { clearDefaultLauncher() }
 
         btnCommonApps.setOnClickListener { startActivity(Intent(this, CommonAppsActivity::class.java)) }
 
@@ -218,6 +238,31 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setAsDefaultLauncher() {
+        if (isAppDefaultLauncher()) {
+            Toast.makeText(this, "当前已是默认桌面", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val roleManager = getSystemService(RoleManager::class.java)
+                if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    requestHomeRoleLauncher.launch(
+                        roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                    )
+                    return
+                }
+            }
+
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+            Toast.makeText(this, "请选择 MoreTalk 作为默认桌面", Toast.LENGTH_LONG).show()
+            return
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法打开桌面设置", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        /*
         val pm = packageManager
         val intent = pm.getLaunchIntentForPackage(packageName)
         if (intent != null) {
@@ -237,6 +282,77 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "无法设置为默认桌面", Toast.LENGTH_SHORT).show()
         }
+        */
+    }
+
+    private fun clearDefaultLauncher() {
+        if (!isAppDefaultLauncher()) {
+            Toast.makeText(this, "当前未设为默认桌面", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            packageManager.clearPackagePreferredActivities(packageName)
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+            Toast.makeText(this, "请选择其他桌面应用以取消默认桌面", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法打开桌面设置", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun updateDefaultLauncherButtonState() {
+        val isDefaultLauncher = isAppDefaultLauncher()
+        btnSetDefaultLauncher.isEnabled = !isDefaultLauncher
+        btnSetDefaultLauncher.alpha = if (isDefaultLauncher) 0.6f else 1.0f
+        btnSetDefaultLauncher.text = if (isDefaultLauncher) {
+            "已设为默认桌面"
+        } else {
+            "设为默认桌面"
+        }
+        btnClearDefaultLauncher.isEnabled = isDefaultLauncher
+        btnClearDefaultLauncher.alpha = if (isDefaultLauncher) 1.0f else 0.6f
+        btnClearDefaultLauncher.text = "取消默认桌面"
+    }
+
+    private fun isAppDefaultLauncher(): Boolean {
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+        }
+        val resolveInfo = packageManager.resolveActivity(
+            homeIntent,
+            PackageManager.MATCH_DEFAULT_ONLY
+        ) ?: return false
+
+        return resolveInfo.activityInfo?.packageName == packageName
+    }
+
+    private fun ensureClearDefaultLauncherButton(): Button {
+        val parent = btnSetDefaultLauncher.parent as ConstraintLayout
+        parent.findViewWithTag<Button>("clear_default_launcher_button")?.let { return it }
+
+        val button = Button(this).apply {
+            id = View.generateViewId()
+            tag = "clear_default_launcher_button"
+            text = "取消默认桌面"
+            textSize = 24f
+        }
+
+        val layoutParams = ConstraintLayout.LayoutParams(
+            0,
+            dpToPx(56)
+        ).apply {
+            topToBottom = btnSetDefaultLauncher.id
+            startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+            endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+            topMargin = dpToPx(12)
+        }
+
+        parent.addView(button, layoutParams)
+        return button
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
     }
 
     private fun loadCommonApps(commonAppsSet: Set<String>?) {
@@ -356,13 +472,14 @@ class SettingsActivity : AppCompatActivity() {
         textIconSize.textSize = scaledOptionSize
         textWeatherVol.textSize = scaledOptionSize
         textNoCommonApps.textSize = scaledOptionSize
-        textSpeechRate.textSize = scaledOptionSize
+        textSpeechRate.textSize = 24f
 
         // 标题文本
-        textSpeechRateTitle.textSize = scaledTitleSize
+        textSpeechRateTitle.textSize = 27f
         
         // 按钮文本
         btnSetDefaultLauncher.textSize = scaledOptionSize
+        btnClearDefaultLauncher.textSize = scaledOptionSize
         btnCommonApps.textSize = scaledButtonSize
         btnContacts.textSize = scaledButtonSize
         

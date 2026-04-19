@@ -8,7 +8,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="#F5F5F5"
-        android:padding="16dp">
+        android:padding="16dp"
+        android:paddingBottom="40dp">
 
         <!-- 页面标题 -->
         <TextView
