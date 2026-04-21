@@ -137,7 +137,7 @@ class SelectToSpeakService : AccessibilityService() {
                                         tabNode.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
                                     }
                                     Log.d(TAG, "点击底部【微信】按钮结果: $clickResult")
-                                    delay(500)
+                                    waitStep(500)
                                 } else {
                                     Log.d(TAG, "未找到底部【微信】按钮，直接进入步骤2")
                                 }
@@ -164,7 +164,7 @@ class SelectToSpeakService : AccessibilityService() {
                                 if (inputNode != null && inputNode.isEditable) {
                                     val clearResult = clearInputField(inputNode)
                                     if (clearResult) {
-                                        delay(200)
+                                        waitStep(200)
                                         resetRetryAndNavigation()
                                         WeChatData.updateIndex(3)
                                         setProcessing(false)
@@ -200,7 +200,7 @@ class SelectToSpeakService : AccessibilityService() {
                     isChatPage(currentActivity) -> {
                         Log.d(TAG, ">>> 在聊天界面，执行返回 <<<")
                         performGlobalAction(GLOBAL_ACTION_BACK)
-                        delay(500)
+                        waitStep(500)
                         incrementNavigationAttempts()
                         setProcessing(false)
                         scheduleNextStep(500)
@@ -210,9 +210,9 @@ class SelectToSpeakService : AccessibilityService() {
                     isDialogPage(currentActivity) -> {
                         Log.d(TAG, ">>> 检测到弹窗，关闭弹窗 <<<")
                         performGlobalAction(GLOBAL_ACTION_BACK)
-                        delay(500)
+                        waitStep(500)
                         performGlobalAction(GLOBAL_ACTION_BACK)
-                        delay(500)
+                        waitStep(500)
                         setProcessing(false)
                         scheduleNextStep(500)
                         return@launch
@@ -223,7 +223,7 @@ class SelectToSpeakService : AccessibilityService() {
                         if (navigationAttempts < MAX_NAVIGATION_ATTEMPTS) {
                             Log.d(TAG, ">>> 在其他页面，执行返回 (${navigationAttempts + 1}/$MAX_NAVIGATION_ATTEMPTS) <<<")
                             performGlobalAction(GLOBAL_ACTION_BACK)
-                            delay(500)
+                            waitStep(500)
                             incrementNavigationAttempts()
                             setProcessing(false)
                             scheduleNextStep(500)
@@ -275,7 +275,7 @@ class SelectToSpeakService : AccessibilityService() {
                         PerformanceMonitor.endTimer("step2_clickSearch")
                         return@launch
                     }
-                    delay(500)
+                    waitStep(500)
                     resetRetryAndNavigation()
                     WeChatData.updateIndex(3)
                     setProcessing(false)
@@ -339,7 +339,7 @@ class SelectToSpeakService : AccessibilityService() {
                         return@launch
                     }
                     Log.d(TAG, "输入成功，等待搜索结果")
-                    delay(500)
+                    waitStep(500)
                     resetRetryAndNavigation()
                     WeChatData.updateIndex(4)
                     setProcessing(false)
@@ -386,7 +386,7 @@ class SelectToSpeakService : AccessibilityService() {
                         setProcessing(false)
                         return@launch
                     }
-                    delay(500)
+                    waitStep(500)
                     resetRetryAndNavigation()
                     WeChatData.updateIndex(5)
                     setProcessing(false)
@@ -442,7 +442,7 @@ class SelectToSpeakService : AccessibilityService() {
                         setProcessing(false)
                         return@launch
                     }
-                    delay(500)
+                    waitStep(500)
                     resetRetryAndNavigation()
                     WeChatData.updateIndex(6)
                     setProcessing(false)
@@ -488,7 +488,7 @@ class SelectToSpeakService : AccessibilityService() {
                     // 使用你代码中的 performClick 模拟物理点击，解决 performAction 无效的问题
                     performClick(rect.centerX().toFloat(), rect.centerY().toFloat())
 
-                    delay(800) // 等待底部菜单弹窗弹出
+                    waitStep(800) // 等待底部菜单弹窗弹出
                     WeChatData.updateIndex(7)
                     setProcessing(false)
                     scheduleNextStep(200)
@@ -538,7 +538,7 @@ class SelectToSpeakService : AccessibilityService() {
                     }
 
                     Log.d(TAG, "点击通话选项结果: $clickResult")
-                    delay(500)
+                    waitStep(500)
                     Log.d(TAG, ">>> 通话流程完成 <<<")
                     WeChatData.updateIndex(0)
                     setProcessing(false)
@@ -900,6 +900,12 @@ class SelectToSpeakService : AccessibilityService() {
 
     // ==================== 主动触发下一步 ====================
 
+    private fun getStepDelay(delayMs: Long): Long = maxOf(delayMs * 2, 1000L)
+
+    private suspend fun waitStep(delayMs: Long) {
+        delay(getStepDelay(delayMs))
+    }
+
     private fun scheduleNextStep(delayMs: Long = 300) {
         cancelNextStep()
         nextStepRunnable = Runnable {
@@ -917,7 +923,7 @@ class SelectToSpeakService : AccessibilityService() {
                 }
             }
         }
-        mainHandler.postDelayed(nextStepRunnable!!, delayMs)
+        mainHandler.postDelayed(nextStepRunnable!!, getStepDelay(delayMs))
     }
 
     private fun cancelNextStep() {
