@@ -17,6 +17,10 @@
   <a href="README_en.md">English</a> | <a href="README.md">简体中文</a>
 </p>
 
+<p align="center">
+  <a href="UPDATE_LOG.md">Update Log / 更新日志</a>
+</p>
+
 ---
 
 ## 📖 Project Vision
