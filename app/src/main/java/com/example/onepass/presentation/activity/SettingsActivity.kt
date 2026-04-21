@@ -7,20 +7,24 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
 import android.view.View
+import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.SeekBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.Button
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.cardview.widget.CardView
-import androidx.constraintlayout.widget.ConstraintLayout
 import com.example.onepass.R
 import com.example.onepass.core.config.GlobalScaleManager
+import com.example.onepass.service.BundledSpeechSupport
+import com.example.onepass.service.SpeechEngineMode
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -33,65 +37,69 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private lateinit var speechSupport: BundledSpeechSupport
+
     private lateinit var radioLunar: RadioButton
     private lateinit var radioSolar: RadioButton
     private lateinit var dateStyleGroup: RadioGroup
+
+    private lateinit var radioSpeechAuto: RadioButton
+    private lateinit var radioSpeechSystem: RadioButton
+    private lateinit var radioSpeechBundled: RadioButton
+    private lateinit var speechEngineGroup: RadioGroup
+    private lateinit var textCurrentSpeechEngine: TextView
+    private lateinit var textBundledSpeechModel: TextView
+
     private lateinit var seekBarIconSize: SeekBar
     private lateinit var textIconSize: TextView
     private lateinit var btnSetDefaultLauncher: Button
     private lateinit var btnClearDefaultLauncher: Button
 
-    // new UI controls
     private lateinit var btnCommonApps: Button
-    private lateinit var switchWeather: android.widget.Switch
+    private lateinit var switchWeather: Switch
     private lateinit var seekBarWeatherVol: SeekBar
     private lateinit var textWeatherVol: TextView
-    private lateinit var speechRateCard: CardView
     private lateinit var seekBarSpeechRate: SeekBar
     private lateinit var textSpeechRate: TextView
-    private lateinit var commonAppsScrollView: android.widget.HorizontalScrollView
-    private lateinit var commonAppsContainer: android.widget.LinearLayout
+    private lateinit var commonAppsScrollView: HorizontalScrollView
+    private lateinit var commonAppsContainer: LinearLayout
     private lateinit var textNoCommonApps: TextView
     private lateinit var btnContacts: Button
-    
-    // 标签文本控件
+
     private lateinit var textDateStyle: TextView
     private lateinit var textCommonAppsTitle: TextView
     private lateinit var textContactsTitle: TextView
     private lateinit var textIconSizeTitle: TextView
     private lateinit var textWeatherTitle: TextView
     private lateinit var textSpeechRateTitle: TextView
+    private lateinit var textSpeechEngineTitle: TextView
 
-    private var isLoggedIn = false
-    private val PREFS_NAME = "OnePassPrefs"
-    private val COMMON_APPS_PREFS = "common_apps_prefs"
-    private val KEY_DATE_STYLE = "date_style"
-    private val VALUE_LUNAR = "lunar"
-    private val VALUE_SOLAR = "solar"
-
-    private val KEY_WEATHER_ENABLED = "weather_enabled"
-    private val KEY_WEATHER_VOLUME = "weather_volume"
-    private val KEY_SPEECH_RATE = "speech_rate"
-    private val KEY_COMMON_APPS = "common_apps"
-    private val AVAILABLE_APPS = arrayOf("微信", "QQ", "微博", "浏览器", "邮件")
+    private val prefs by lazy {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        speechSupport = BundledSpeechSupport(this)
+
         initViews()
         loadSettings()
         setupListeners()
+        updateDefaultLauncherButtonState()
+        refreshSpeechStatus()
     }
 
     override fun onResume() {
         super.onResume()
+
         val commonAppsSet = getSharedPreferences(COMMON_APPS_PREFS, Context.MODE_PRIVATE)
             .getStringSet(KEY_COMMON_APPS, HashSet<String>())
         loadCommonApps(commonAppsSet)
         updateDefaultLauncherButtonState()
-        
-        // 应用最新的缩放设置
+        refreshSpeechStatus()
+
         val scalePercentage = GlobalScaleManager.getScalePercentage(this)
         applyScaleEffects(scalePercentage)
     }
@@ -100,41 +108,43 @@ class SettingsActivity : AppCompatActivity() {
         radioLunar = findViewById(R.id.radioLunar)
         radioSolar = findViewById(R.id.radioSolar)
         dateStyleGroup = findViewById(R.id.dateStyleGroup)
+
+        radioSpeechAuto = findViewById(R.id.radioSpeechAuto)
+        radioSpeechSystem = findViewById(R.id.radioSpeechSystem)
+        radioSpeechBundled = findViewById(R.id.radioSpeechBundled)
+        speechEngineGroup = findViewById(R.id.speechEngineGroup)
+        textCurrentSpeechEngine = findViewById(R.id.textCurrentSpeechEngine)
+        textBundledSpeechModel = findViewById(R.id.textBundledSpeechModel)
+
         seekBarIconSize = findViewById(R.id.seekBarIconSize)
         textIconSize = findViewById(R.id.textIconSize)
         btnSetDefaultLauncher = findViewById(R.id.btnSetDefaultLauncher)
-        btnClearDefaultLauncher = ensureClearDefaultLauncherButton()
-        
-        // 设置缩放比例进度条的范围
-        seekBarIconSize.min = 60
-        seekBarIconSize.max = 100
+        btnClearDefaultLauncher = findViewById(R.id.btnClearDefaultLauncher)
 
-        // new controls
         btnCommonApps = findViewById(R.id.btnCommonApps)
         switchWeather = findViewById(R.id.switchWeather)
         seekBarWeatherVol = findViewById(R.id.seekBarWeatherVol)
         textWeatherVol = findViewById(R.id.textWeatherVol)
-        speechRateCard = findViewById(R.id.speechRateCard)
         seekBarSpeechRate = findViewById(R.id.seekBarSpeechRate)
         textSpeechRate = findViewById(R.id.textSpeechRate)
         commonAppsScrollView = findViewById(R.id.commonAppsScrollView)
         commonAppsContainer = findViewById(R.id.commonAppsContainer)
         textNoCommonApps = findViewById(R.id.textNoCommonApps)
         btnContacts = findViewById(R.id.btnContacts)
-        
-        // 标签文本控件
+
         textDateStyle = findViewById(R.id.textDateStyle)
-        radioLunar = findViewById(R.id.radioLunar)
-        radioSolar = findViewById(R.id.radioSolar)
         textCommonAppsTitle = findViewById(R.id.textCommonAppsTitle)
         textContactsTitle = findViewById(R.id.textContactsTitle)
         textIconSizeTitle = findViewById(R.id.textIconSizeTitle)
         textWeatherTitle = findViewById(R.id.textWeatherTitle)
         textSpeechRateTitle = findViewById(R.id.textSpeechRateTitle)
+        textSpeechEngineTitle = findViewById(R.id.textSpeechEngineTitle)
+
+        seekBarIconSize.min = 60
+        seekBarIconSize.max = 100
     }
 
     private fun loadSettings() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val dateStyle = prefs.getString(KEY_DATE_STYLE, VALUE_SOLAR)
         if (dateStyle == VALUE_LUNAR) {
             radioLunar.isChecked = true
@@ -142,99 +152,162 @@ class SettingsActivity : AppCompatActivity() {
             radioSolar.isChecked = true
         }
 
+        when (speechSupport.getMode()) {
+            SpeechEngineMode.AUTO -> radioSpeechAuto.isChecked = true
+            SpeechEngineMode.SYSTEM -> radioSpeechSystem.isChecked = true
+            SpeechEngineMode.BUNDLED_MATCHA -> radioSpeechBundled.isChecked = true
+        }
+
         val weatherEnabled = prefs.getBoolean(KEY_WEATHER_ENABLED, true)
         switchWeather.isChecked = weatherEnabled
-        val vol = prefs.getInt(KEY_WEATHER_VOLUME, 50)
-        seekBarWeatherVol.progress = vol
-        textWeatherVol.text = vol.toString() + "%"
 
+        val weatherVolume = prefs.getInt(KEY_WEATHER_VOLUME, 50)
+        seekBarWeatherVol.progress = weatherVolume
+        textWeatherVol.text = "$weatherVolume%"
         seekBarWeatherVol.isEnabled = weatherEnabled
 
-        // 语速设置 (0-100 -> 0.5x-2.0x)
         val speechRateProgress = prefs.getInt(KEY_SPEECH_RATE, 50)
         seekBarSpeechRate.progress = speechRateProgress
-        val speechRate = 0.5f + (speechRateProgress / 50f)
-        textSpeechRate.text = String.format("%.1fx", speechRate)
+        textSpeechRate.text = String.format("%.1fx", 0.5f + (speechRateProgress / 50f))
 
         val scalePercentage = GlobalScaleManager.getScalePercentage(this)
         seekBarIconSize.progress = scalePercentage
-        textIconSize.text = scalePercentage.toString() + "%"
-        
-        // 应用缩放效果
+        textIconSize.text = "$scalePercentage%"
         applyScaleEffects(scalePercentage)
 
-        val commonAppsSet = prefs.getStringSet(KEY_COMMON_APPS, HashSet<String>())
+        val commonAppsSet = getSharedPreferences(COMMON_APPS_PREFS, Context.MODE_PRIVATE)
+            .getStringSet(KEY_COMMON_APPS, HashSet<String>())
         loadCommonApps(commonAppsSet)
     }
 
     private fun setupListeners() {
         dateStyleGroup.setOnCheckedChangeListener { _, checkedId ->
             val isLunar = checkedId == R.id.radioLunar
-            val editor = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-            editor.putString(KEY_DATE_STYLE, if (isLunar) VALUE_LUNAR else VALUE_SOLAR)
-            editor.apply()
-            Toast.makeText(this, if (isLunar) "已选择农历" else "已选择阳历", Toast.LENGTH_SHORT).show()
+            prefs.edit()
+                .putString(KEY_DATE_STYLE, if (isLunar) VALUE_LUNAR else VALUE_SOLAR)
+                .apply()
+            Toast.makeText(
+                this,
+                if (isLunar) "已切换到农历显示" else "已切换到阳历显示",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        speechEngineGroup.setOnCheckedChangeListener { _, checkedId ->
+            val mode = when (checkedId) {
+                R.id.radioSpeechSystem -> SpeechEngineMode.SYSTEM
+                R.id.radioSpeechBundled -> SpeechEngineMode.BUNDLED_MATCHA
+                else -> SpeechEngineMode.AUTO
+            }
+            speechSupport.setMode(mode)
+            speechSupport.syncResolvedEngineLabel()
+            refreshSpeechStatus()
+            Toast.makeText(
+                this,
+                when (mode) {
+                    SpeechEngineMode.AUTO -> "已切换到自动语音引擎"
+                    SpeechEngineMode.SYSTEM -> "已切换到系统 TTS"
+                    SpeechEngineMode.BUNDLED_MATCHA -> "已切换到内置 Matcha"
+                },
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
         seekBarIconSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val clampedProgress = progress.coerceIn(60, 100)
-                textIconSize.text = clampedProgress.toString() + "%"
-                // 实时应用缩放效果
-                applyScaleEffects(clampedProgress)
+                val clamped = progress.coerceIn(60, 100)
+                textIconSize.text = "$clamped%"
+                applyScaleEffects(clamped)
             }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                val clampedProgress = seekBarIconSize.progress.coerceIn(60, 100)
-                GlobalScaleManager.setScalePercentage(this@SettingsActivity, clampedProgress)
-                Toast.makeText(this@SettingsActivity, "缩放比例已设置为 " + clampedProgress + "%", Toast.LENGTH_SHORT).show()
+                val clamped = seekBarIconSize.progress.coerceIn(60, 100)
+                GlobalScaleManager.setScalePercentage(this@SettingsActivity, clamped)
+                Toast.makeText(
+                    this@SettingsActivity,
+                    "图标大小已调整为 $clamped%",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         })
 
         btnSetDefaultLauncher.setOnClickListener { setAsDefaultLauncher() }
         btnClearDefaultLauncher.setOnClickListener { clearDefaultLauncher() }
 
-        btnCommonApps.setOnClickListener { startActivity(Intent(this, CommonAppsActivity::class.java)) }
+        btnCommonApps.setOnClickListener {
+            startActivity(Intent(this, CommonAppsActivity::class.java))
+        }
 
-        btnContacts.setOnClickListener { startActivity(Intent(this, ContactsActivity::class.java)) }
+        btnContacts.setOnClickListener {
+            startActivity(Intent(this, ContactsActivity::class.java))
+        }
 
         switchWeather.setOnCheckedChangeListener { _, isChecked ->
-            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit().putBoolean(KEY_WEATHER_ENABLED, isChecked).apply()
             seekBarWeatherVol.isEnabled = isChecked
-            Toast.makeText(this, if (isChecked) "天气播报已开启" else "天气播报已关闭", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                if (isChecked) "已开启天气播报" else "已关闭天气播报",
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
         seekBarWeatherVol.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                textWeatherVol.text = progress.toString() + "%"
+                textWeatherVol.text = "$progress%"
             }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 prefs.edit().putInt(KEY_WEATHER_VOLUME, seekBarWeatherVol.progress).apply()
-                Toast.makeText(this@SettingsActivity, "天气音量设为 ${seekBarWeatherVol.progress}%", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@SettingsActivity,
+                    "天气播报音量已调整为 ${seekBarWeatherVol.progress}%",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         })
 
-        // 语速设置
         seekBarSpeechRate.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val rate = 0.5f + (progress / 50f)
                 textSpeechRate.text = String.format("%.1fx", rate)
             }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 prefs.edit().putInt(KEY_SPEECH_RATE, seekBarSpeechRate.progress).apply()
                 val rate = 0.5f + (seekBarSpeechRate.progress / 50f)
-                Toast.makeText(this@SettingsActivity, "播报语速设为 ${String.format("%.1fx", rate)}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@SettingsActivity,
+                    "语速已调整为 ${String.format("%.1fx", rate)}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         })
+    }
+
+    private fun refreshSpeechStatus() {
+        val bundledStatus = speechSupport.getBundledVoiceStatus()
+        val bundledModelLabel = if (bundledStatus.isInstalled) {
+            "内置语音模型：${speechSupport.getPreferredVoiceDisplayName()}"
+        } else {
+            "内置语音模型：未检测到（缺少 ${bundledStatus.missingAssets.joinToString("、")}）"
+        }
+
+        textCurrentSpeechEngine.text = "当前实际引擎：${speechSupport.getResolvedEngineLabel()}"
+        textBundledSpeechModel.text = bundledModelLabel
+
+        radioSpeechBundled.isEnabled = bundledStatus.isInstalled
+        if (!bundledStatus.isInstalled && speechSupport.getMode() == SpeechEngineMode.BUNDLED_MATCHA) {
+            speechSupport.setMode(SpeechEngineMode.AUTO)
+            speechSupport.syncResolvedEngineLabel()
+            radioSpeechAuto.isChecked = true
+        }
     }
 
     private fun setAsDefaultLauncher() {
@@ -255,34 +328,10 @@ class SettingsActivity : AppCompatActivity() {
             }
 
             startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
-            Toast.makeText(this, "请选择 MoreTalk 作为默认桌面", Toast.LENGTH_LONG).show()
-            return
-        } catch (e: Exception) {
+            Toast.makeText(this, "请在系统设置中选择 MoreTalk 作为默认桌面", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
             Toast.makeText(this, "无法打开桌面设置", Toast.LENGTH_SHORT).show()
-            return
         }
-
-        /*
-        val pm = packageManager
-        val intent = pm.getLaunchIntentForPackage(packageName)
-        if (intent != null) {
-            val componentName = intent.component
-            val mainIntent = Intent().apply {
-                component = componentName
-                action = Intent.ACTION_MAIN
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            try {
-                startActivity(mainIntent)
-                Toast.makeText(this, "已设置为默认桌面", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "设置失败，请手动设置", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(this, "无法设置为默认桌面", Toast.LENGTH_SHORT).show()
-        }
-        */
     }
 
     private fun clearDefaultLauncher() {
@@ -292,10 +341,11 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         try {
+            @Suppress("DEPRECATION")
             packageManager.clearPackagePreferredActivities(packageName)
             startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
-            Toast.makeText(this, "请选择其他桌面应用以取消默认桌面", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
+            Toast.makeText(this, "请改选其他桌面应用以取消默认桌面", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
             Toast.makeText(this, "无法打开桌面设置", Toast.LENGTH_SHORT).show()
         }
     }
@@ -303,14 +353,15 @@ class SettingsActivity : AppCompatActivity() {
     private fun updateDefaultLauncherButtonState() {
         val isDefaultLauncher = isAppDefaultLauncher()
         btnSetDefaultLauncher.isEnabled = !isDefaultLauncher
-        btnSetDefaultLauncher.alpha = if (isDefaultLauncher) 0.6f else 1.0f
+        btnSetDefaultLauncher.alpha = if (isDefaultLauncher) 0.6f else 1f
         btnSetDefaultLauncher.text = if (isDefaultLauncher) {
             "已设为默认桌面"
         } else {
             "设为默认桌面"
         }
+
         btnClearDefaultLauncher.isEnabled = isDefaultLauncher
-        btnClearDefaultLauncher.alpha = if (isDefaultLauncher) 1.0f else 0.6f
+        btnClearDefaultLauncher.alpha = if (isDefaultLauncher) 1f else 0.6f
         btnClearDefaultLauncher.text = "取消默认桌面"
     }
 
@@ -326,178 +377,123 @@ class SettingsActivity : AppCompatActivity() {
         return resolveInfo.activityInfo?.packageName == packageName
     }
 
-    private fun ensureClearDefaultLauncherButton(): Button {
-        val parent = btnSetDefaultLauncher.parent as ConstraintLayout
-        parent.findViewWithTag<Button>("clear_default_launcher_button")?.let { return it }
-
-        val button = Button(this).apply {
-            id = View.generateViewId()
-            tag = "clear_default_launcher_button"
-            text = "取消默认桌面"
-            textSize = 24f
-        }
-
-        val layoutParams = ConstraintLayout.LayoutParams(
-            0,
-            dpToPx(56)
-        ).apply {
-            topToBottom = btnSetDefaultLauncher.id
-            startToStart = ConstraintLayout.LayoutParams.PARENT_ID
-            endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
-            topMargin = dpToPx(12)
-        }
-
-        parent.addView(button, layoutParams)
-        return button
-    }
-
-    private fun dpToPx(dp: Int): Int {
-        return (dp * resources.displayMetrics.density).toInt()
-    }
-
     private fun loadCommonApps(commonAppsSet: Set<String>?) {
         commonAppsContainer.removeAllViews()
-        
+
         if (commonAppsSet.isNullOrEmpty()) {
-            commonAppsScrollView.visibility = android.view.View.GONE
-            textNoCommonApps.visibility = android.view.View.VISIBLE
+            commonAppsScrollView.visibility = View.GONE
+            textNoCommonApps.visibility = View.VISIBLE
             return
         }
-        
-        commonAppsScrollView.visibility = android.view.View.VISIBLE
-        textNoCommonApps.visibility = android.view.View.GONE
-        
-        // 从 SharedPreferences 加载应用排序信息
+
+        commonAppsScrollView.visibility = View.VISIBLE
+        textNoCommonApps.visibility = View.GONE
+
         val savedOrders = getSharedPreferences(COMMON_APPS_PREFS, Context.MODE_PRIVATE)
-            .getString("app_orders", null)
+            .getString(KEY_APP_ORDERS, null)
         val appOrders = if (savedOrders != null) {
-            try {
-                parseAppOrders(savedOrders)
-            } catch (e: Exception) {
-                emptyMap()
-            }
+            runCatching { parseAppOrders(savedOrders) }.getOrDefault(emptyMap())
         } else {
             emptyMap()
         }
-        
-        // 按排序值对应用进行排序
-        val sortedApps = commonAppsSet.sortedWith(Comparator {
-                app1, app2 ->
-            val order1 = appOrders[app1] ?: Int.MAX_VALUE
-            val order2 = appOrders[app2] ?: Int.MAX_VALUE
-            order1.compareTo(order2)
-        })
-        
+
+        val sortedApps = commonAppsSet.sortedWith(
+            compareBy<String> { appOrders[it] ?: Int.MAX_VALUE }
+        )
+
         for (packageName in sortedApps) {
-            try {
+            runCatching {
                 val packageInfo = packageManager.getPackageInfo(packageName, 0)
-                val appName = packageInfo.applicationInfo?.loadLabel(packageManager)?.toString() ?: packageName
-                val appIcon = packageInfo.applicationInfo?.loadIcon(packageManager)
-                
-                if (appIcon == null) {
-                    continue
-                }
-                
-                // 创建应用项布局
-                val appItemLayout = android.widget.LinearLayout(this)
-                appItemLayout.orientation = android.widget.LinearLayout.VERTICAL
-                appItemLayout.gravity = android.view.Gravity.CENTER
-                val layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                layoutParams.setMargins(16, 0, 16, 0)
-                appItemLayout.layoutParams = layoutParams
-                
-                // 创建应用图标
-                val iconView = android.widget.ImageView(this)
-                iconView.setImageDrawable(appIcon)
-                val originalAppIconSize = 120 // 原始大小120dp
-                val scaledAppIconSize = GlobalScaleManager.getScaledValue(this, originalAppIconSize)
-                val iconParams = android.widget.LinearLayout.LayoutParams(scaledAppIconSize, scaledAppIconSize)
-                iconParams.setMargins(0, 0, 0, 0)
-                iconView.layoutParams = iconParams
-                
-                // 添加到应用项布局
-                appItemLayout.addView(iconView)
-                
-                // 添加点击事件
-                appItemLayout.setOnClickListener {
-                    try {
-                        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-                        if (launchIntent != null) {
-                            startActivity(launchIntent)
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(this, "启动应用失败", Toast.LENGTH_SHORT).show()
+                val appIcon = packageInfo.applicationInfo?.loadIcon(packageManager) ?: return@runCatching
+                val item = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        setMargins(16, 0, 16, 0)
                     }
                 }
-                
-                // 添加到容器
-                commonAppsContainer.addView(appItemLayout)
-            } catch (e: Exception) {
-                continue
+
+                val iconView = ImageView(this).apply {
+                    setImageDrawable(appIcon)
+                    layoutParams = LinearLayout.LayoutParams(
+                        GlobalScaleManager.getScaledValue(this@SettingsActivity, 120),
+                        GlobalScaleManager.getScaledValue(this@SettingsActivity, 120)
+                    )
+                }
+
+                item.addView(iconView)
+                item.setOnClickListener {
+                    val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                    if (launchIntent != null) {
+                        startActivity(launchIntent)
+                    } else {
+                        Toast.makeText(this, "无法打开该应用", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                commonAppsContainer.addView(item)
             }
         }
     }
 
     private fun parseAppOrders(ordersString: String): Map<String, Int> {
         val orders = mutableMapOf<String, Int>()
-        val pairs = ordersString.split(",")
-        for (pair in pairs) {
+        for (pair in ordersString.split(",")) {
             val parts = pair.split(":")
             if (parts.size == 2) {
-                try {
-                    orders[parts[0]] = parts[1].toInt()
-                } catch (e: Exception) {
+                parts[1].toIntOrNull()?.let { order ->
+                    orders[parts[0]] = order
                 }
             }
         }
         return orders
     }
-    
-    private fun applyScaleEffects(scalePercentage: Int) {
-        // 缩放字体大小
-        val originalTitleSize = 27f // 标题原始大小27sp
-        val originalOptionSize = 24f // 选项原始大小24sp
-        val originalButtonSize = 20f // 按钮原始大小20sp
 
-        val scaledTitleSize = GlobalScaleManager.getScaledValue(this, originalTitleSize)
-        val scaledOptionSize = GlobalScaleManager.getScaledValue(this, originalOptionSize)
-        val scaledButtonSize = GlobalScaleManager.getScaledValue(this, originalButtonSize)
-        
-        // 选项文本
+    private fun applyScaleEffects(scalePercentage: Int) {
+        val scaledTitleSize = GlobalScaleManager.getScaledValue(this, 27f)
+        val scaledOptionSize = GlobalScaleManager.getScaledValue(this, 24f)
+        val scaledButtonSize = GlobalScaleManager.getScaledValue(this, 20f)
+
+        textDateStyle.textSize = scaledTitleSize
+        textCommonAppsTitle.textSize = scaledTitleSize
+        textContactsTitle.textSize = scaledTitleSize
+        textIconSizeTitle.textSize = scaledTitleSize
+        textWeatherTitle.textSize = scaledTitleSize
+        textSpeechEngineTitle.textSize = scaledTitleSize
+        textSpeechRateTitle.textSize = scaledTitleSize
+
         radioLunar.textSize = scaledOptionSize
         radioSolar.textSize = scaledOptionSize
+        radioSpeechAuto.textSize = scaledOptionSize
+        radioSpeechSystem.textSize = scaledOptionSize
+        radioSpeechBundled.textSize = scaledOptionSize
         textIconSize.textSize = scaledOptionSize
         textWeatherVol.textSize = scaledOptionSize
+        textCurrentSpeechEngine.textSize = scaledOptionSize
+        textBundledSpeechModel.textSize = scaledOptionSize
         textNoCommonApps.textSize = scaledOptionSize
-        textSpeechRate.textSize = 24f
 
-        // 标题文本
-        textSpeechRateTitle.textSize = 27f
-        
-        // 按钮文本
         btnSetDefaultLauncher.textSize = scaledOptionSize
         btnClearDefaultLauncher.textSize = scaledOptionSize
         btnCommonApps.textSize = scaledButtonSize
         btnContacts.textSize = scaledButtonSize
-        
-        // 缩放常用应用图标
-        val originalAppIconSize = 120 // 原始大小120dp
-        val scaledAppIconSize = GlobalScaleManager.getScaledValue(this, originalAppIconSize)
-        
-        for (i in 0 until commonAppsContainer.childCount) {
-            val childView = commonAppsContainer.getChildAt(i)
-            if (childView is android.widget.LinearLayout && childView.childCount > 0) {
-                val iconView = childView.getChildAt(0)
-                if (iconView is android.widget.ImageView) {
-                    val iconParams = iconView.layoutParams
-                    iconParams.width = scaledAppIconSize
-                    iconParams.height = scaledAppIconSize
-                    iconView.layoutParams = iconParams
-                }
-            }
-        }
+
+        // 语速显示固定大小，不随图标缩放变化。
+        textSpeechRate.textSize = 24f
+    }
+
+    companion object {
+        private const val PREFS_NAME = "OnePassPrefs"
+        private const val COMMON_APPS_PREFS = "common_apps_prefs"
+        private const val KEY_DATE_STYLE = "date_style"
+        private const val VALUE_LUNAR = "lunar"
+        private const val VALUE_SOLAR = "solar"
+        private const val KEY_WEATHER_ENABLED = "weather_enabled"
+        private const val KEY_WEATHER_VOLUME = "weather_volume"
+        private const val KEY_SPEECH_RATE = "speech_rate"
+        private const val KEY_COMMON_APPS = "common_apps"
+        private const val KEY_APP_ORDERS = "app_orders"
     }
 }

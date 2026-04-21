@@ -1,4 +1,4 @@
-package com.example.onepass.presentation.activity
+﻿package com.example.onepass.presentation.activity
 
 import android.Manifest
 import android.animation.ObjectAnimator
@@ -45,10 +45,14 @@ import com.example.onepass.core.config.GlobalScaleManager
 import com.example.onepass.domain.model.Contact
 import com.example.onepass.domain.model.WeChatData
 import com.example.onepass.presentation.adapter.HomeContactAdapter
+import com.example.onepass.service.BundledSpeechEngine
+import com.example.onepass.service.BundledSpeechSupport
+import com.example.onepass.service.SpeechEngineMode
 import com.example.onepass.utils.PerformanceMonitor
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import kotlin.math.max
@@ -82,7 +86,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var locationManager: LocationManager
     private lateinit var textToSpeech: TextToSpeech
+    private lateinit var bundledSpeechSupport: BundledSpeechSupport
     private var isTextToSpeechInitialized = false
+    private var bundledSpeechEngine: BundledSpeechEngine? = null
+    private var speechJob: Job? = null
     private var currentCity = AppConfig.CITY
     private var isRefreshing = false
     private val handler = Handler(Looper.getMainLooper())
@@ -193,6 +200,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         locationManager = LocationManager(this)
+        bundledSpeechSupport = BundledSpeechSupport(this)
         Logger.d("locationManager 初始化完成")
         
         // 不在onCreate中初始化TextToSpeech，而是在onResume中初始化
@@ -200,6 +208,7 @@ class MainActivity : AppCompatActivity() {
         
         initViews()
         updateDate()
+        preloadBundledSpeechEngine()
         checkLocationPermissionAndFetchWeather()
         
         handler.postDelayed(refreshRunnable, getTimeToNextHour()) // 到下一个整点自动刷新
@@ -208,6 +217,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        speechJob?.cancel()
+        bundledSpeechEngine?.stop()
+        bundledSpeechEngine?.close()
+        bundledSpeechEngine = null
         handler.removeCallbacks(refreshRunnable)
         handler.removeCallbacksAndMessages(null)
         if (isTextToSpeechInitialized) {
@@ -244,6 +257,45 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onResume 完成")
     }
 
+    private fun preloadBundledSpeechEngine() {
+        if (!bundledSpeechSupport.hasBundledVoice()) {
+            if (bundledSpeechSupport.getMode() == SpeechEngineMode.BUNDLED_MATCHA) {
+                bundledSpeechSupport.setLastActiveEngineLabel("内置 Matcha 不可用")
+            }
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val ready = ensureBundledSpeechEngineReady()
+            if (ready && bundledSpeechSupport.getMode() != SpeechEngineMode.SYSTEM) {
+                bundledSpeechSupport.setLastActiveEngineLabel("内置 Matcha")
+            }
+        }
+    }
+
+    @Synchronized
+    private fun ensureBundledSpeechEngineReady(): Boolean {
+        val activeEngine = bundledSpeechEngine ?: BundledSpeechEngine(this).also {
+            bundledSpeechEngine = it
+        }
+        if (activeEngine.isReady()) {
+            return true
+        }
+
+        return runCatching {
+            activeEngine.initialize()
+            activeEngine.isReady()
+        }.getOrDefault(false)
+    }
+
+    private fun stopActiveSpeech() {
+        speechJob?.cancel()
+        bundledSpeechEngine?.stop()
+        if (isTextToSpeechInitialized) {
+            runCatching { textToSpeech.stop() }
+        }
+    }
+
     private fun initTextToSpeech() {
         android.util.Log.i("TTS_DEBUG", "开始异步初始化TextToSpeech")
         
@@ -259,10 +311,17 @@ class MainActivity : AppCompatActivity() {
                             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                                 android.util.Log.e("TTS_DEBUG", "不支持中文语音，结果: $result")
                                 runOnUiThread {
-                                    showTTSErrorDialog()
+                                    if (shouldShowSystemTtsErrorDialog()) {
+                                        showTTSErrorDialog()
+                                    }
                                 }
                             } else {
                                 isTextToSpeechInitialized = true
+                                if (bundledSpeechSupport.getMode() == SpeechEngineMode.SYSTEM ||
+                                    !bundledSpeechSupport.hasBundledVoice()
+                                ) {
+                                    bundledSpeechSupport.setLastActiveEngineLabel("系统 TTS")
+                                }
                                 android.util.Log.i("TTS_DEBUG", "语音播报初始化成功")
                                 
                                 try {
@@ -335,6 +394,11 @@ class MainActivity : AppCompatActivity() {
                         // showTTSErrorDialog()
                     } else {
                         isTextToSpeechInitialized = true
+                        if (bundledSpeechSupport.getMode() == SpeechEngineMode.SYSTEM ||
+                            !bundledSpeechSupport.hasBundledVoice()
+                        ) {
+                            bundledSpeechSupport.setLastActiveEngineLabel("系统 TTS")
+                        }
                         android.util.Log.i("TTS_DEBUG", "重试 - 语音播报初始化成功")
                         
                         try {
@@ -377,6 +441,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun shouldShowSystemTtsErrorDialog(): Boolean {
+        if (!::bundledSpeechSupport.isInitialized) {
+            return true
+        }
+
+        return when (bundledSpeechSupport.getMode()) {
+            SpeechEngineMode.SYSTEM -> true
+            SpeechEngineMode.BUNDLED_MATCHA -> false
+            SpeechEngineMode.AUTO -> !bundledSpeechSupport.hasBundledVoice()
+        }
+    }
+
     private fun showTTSErrorDialog() {
         val builder = android.app.AlertDialog.Builder(this)
         builder.setTitle("语音播报不可用")
@@ -915,42 +991,157 @@ class MainActivity : AppCompatActivity() {
             .replace("初", "初")
     }
 
-    private fun speakWeather(weather: LiveWeather) {
-        if (!isTextToSpeechInitialized) {
-            return
-        }
+    private fun normalizeLunarLabelForSpeech(label: String): String {
+        return label
+            .replace("农历", "农历")
+            .replace("廿", "二十")
+            .replace("卄", "二十")
+            .replace("卅", "三十")
+            .replace("卌", "四十")
+            .replace("卅十", "三十")
+    }
 
-        // 检查设置中是否开启了天气播报
+    private fun normalizeNameForSpeech(name: String): String {
+        return buildString(name.length) {
+            name.forEach { char ->
+                append(
+                    when (char) {
+                        '0' -> "零"
+                        '1' -> "一"
+                        '2' -> "二"
+                        '3' -> "三"
+                        '4' -> "四"
+                        '5' -> "五"
+                        '6' -> "六"
+                        '7' -> "七"
+                        '8' -> "八"
+                        '9' -> "九"
+                        else -> char
+                    }
+                )
+            }
+        }
+    }
+
+    private fun getSpokenWechatName(contact: Contact): String {
+        return normalizeNameForSpeech(contact.wechatNote.ifBlank { contact.name })
+    }
+
+    private fun getSpokenContactName(contact: Contact): String {
+        return normalizeNameForSpeech(contact.name.ifBlank { contact.wechatNote })
+    }
+
+    private fun getSpokenDateLabel(): String {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dateStyle = prefs.getString(KEY_DATE_STYLE, VALUE_SOLAR)
+        val calendar = Calendar.getInstance()
+        val spokenYear = calendar.get(Calendar.YEAR).toString()
+            .map { digit ->
+                when (digit) {
+                    '0' -> "零"
+                    '1' -> "一"
+                    '2' -> "二"
+                    '3' -> "三"
+                    '4' -> "四"
+                    '5' -> "五"
+                    '6' -> "六"
+                    '7' -> "七"
+                    '8' -> "八"
+                    '9' -> "九"
+                    else -> digit.toString()
+                }
+            }
+            .joinToString("")
+
+        return if (dateStyle == VALUE_LUNAR) {
+            val solar = Solar.fromYmd(
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH) + 1,
+                calendar.get(Calendar.DAY_OF_MONTH)
+            )
+            val lunar = solar.lunar
+            val spokenLunarYear = lunar.getYearInChinese().replace("〇", "零")
+            "农历${spokenLunarYear}年${lunar.getMonthInChinese()}月${convertLunarDateForSpeech(lunar.getDayInChinese())}"
+        } else {
+            "阳历${spokenYear}年${calendar.get(Calendar.MONTH) + 1}月${calendar.get(Calendar.DAY_OF_MONTH)}日"
+        }
+    }
+
+    private fun getSpokenWindDirection(direction: String): String {
+        val normalized = direction.trim()
+        if (normalized.isEmpty()) {
+            return "无风"
+        }
+        return if (normalized.endsWith("风")) normalized else "${normalized}风"
+    }
+
+    private fun speakWeather(weather: LiveWeather) {
         val prefs = getSharedPreferences("OnePassPrefs", Context.MODE_PRIVATE)
         val weatherEnabled = prefs.getBoolean("weather_enabled", true)
         if (!weatherEnabled) {
             return
         }
 
-        // 转换农历日期为播报格式
-        val speechLunarDate = if (lunarDateText.startsWith("农历")) {
-            "农历" + convertLunarDateForSpeech(lunarDateText.removePrefix("农历"))
-        } else {
-            lunarDateText
+        val spokenDate = getSpokenDateLabel()
+        val spokenWindDirection = getSpokenWindDirection(weather.winddirection)
+        val speechText =
+            "今天是$spokenDate，${weather.city}的天气是${weather.weather}，气温${weather.temperature}摄氏度，湿度${weather.humidity}%，风力${weather.windpower}级，${spokenWindDirection}"
+        val weatherVolume = prefs.getInt("weather_volume", 50) / 100.0f
+        speakText(speechText, weatherVolume)
+    }
+
+    private fun trySpeakWithSystemTts(text: String, volume: Float): Boolean {
+        if (!isTextToSpeechInitialized) {
+            return false
         }
 
-        val speechText = "今天是$speechLunarDate，${weather.city}的天气是${weather.weather}，气温${weather.temperature}摄氏度，湿度${weather.humidity}%，风力${weather.windpower}级，风向${weather.winddirection}"
+        return runCatching {
+            val params = android.os.Bundle().apply {
+                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f))
+            }
+            textToSpeech.setSpeechRate(getSpeechRate())
+            val result = textToSpeech.speak(
+                text,
+                TextToSpeech.QUEUE_FLUSH,
+                params,
+                "system-${System.currentTimeMillis()}"
+            )
+            if (result == TextToSpeech.SUCCESS) {
+                bundledSpeechSupport.setLastActiveEngineLabel("系统 TTS")
+                true
+            } else {
+                false
+            }
+        }.getOrElse { error ->
+            Log.e(TAG, "System TTS speak failed", error)
+            false
+        }
+    }
 
-        // 按照设置的声音比例播报（相对音量）
-        val weatherVolume = prefs.getInt("weather_volume", 50)
-        val volumeScale = weatherVolume / 100.0f
+    private fun trySpeakWithBundledEngine(text: String, volume: Float): Boolean {
+        if (!bundledSpeechSupport.hasBundledVoice()) {
+            return false
+        }
+        if (!ensureBundledSpeechEngineReady()) {
+            return false
+        }
 
-        // 获取语速设置
-        val speechRate = getSpeechRate()
+        val spoken = bundledSpeechEngine?.speak(text, getSpeechRate(), volume) == true
+        if (spoken) {
+            bundledSpeechSupport.setLastActiveEngineLabel("内置 Matcha")
+        }
+        return spoken
+    }
 
-        // 使用Bundle设置音量和语速参数
-        val params = android.os.Bundle()
-        params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volumeScale)
-
-        // 设置语速
-        textToSpeech.setSpeechRate(speechRate)
-
-        textToSpeech.speak(speechText, TextToSpeech.QUEUE_FLUSH, params, null)
+    private fun showSpeechUnavailableMessage(mode: SpeechEngineMode) {
+        val bundledReason = bundledSpeechEngine?.getLastFailureReason()
+            ?: bundledSpeechEngine?.getStatusReason()
+        val message = when (mode) {
+            SpeechEngineMode.AUTO -> bundledReason ?: "系统 TTS 和内置 Matcha 都不可用"
+            SpeechEngineMode.SYSTEM -> "系统 TTS 当前不可用"
+            SpeechEngineMode.BUNDLED_MATCHA -> bundledReason ?: "内置 Matcha 当前不可用"
+        }
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun showError() {
@@ -1042,7 +1233,7 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             btnPlayWechatVideo.setOnClickListener {
-                speakText("给${contact.name}拨打微信视频")
+                speakText("给${getSpokenWechatName(contact)}拨打微信视频")
             }
         }
         
@@ -1053,7 +1244,7 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             btnPlayWechatVoice.setOnClickListener {
-                speakText("给${contact.name}拨打微信语音")
+                speakText("给${getSpokenWechatName(contact)}拨打微信语音")
             }
         }
         
@@ -1064,41 +1255,38 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             btnPlayPhoneCall.setOnClickListener {
-                speakText("给${contact.name}拨打电话")
+                speakText("给${getSpokenContactName(contact)}拨打电话")
             }
         }
         
         dialog.show()
     }
     
-    private fun speakText(text: String) {
-        Log.d(TAG, "播报语音: $text")
-        Log.d(TAG, "语音播报是否初始化: $isTextToSpeechInitialized")
+    private fun speakText(text: String, volume: Float = 1.0f) {
+        stopActiveSpeech()
+        speechJob = CoroutineScope(Dispatchers.Main).launch {
+            val mode = bundledSpeechSupport.getMode()
+            val spoken = when (mode) {
+                SpeechEngineMode.AUTO -> {
+                    val bundledSpoken = withContext(Dispatchers.IO) {
+                        trySpeakWithBundledEngine(text, volume)
+                    }
+                    bundledSpoken || trySpeakWithSystemTts(text, volume)
+                }
 
-        if (isTextToSpeechInitialized) {
-            try {
-                // 设置全局语速
-                val speechRate = getSpeechRate()
-                textToSpeech.setSpeechRate(speechRate)
-                Log.d(TAG, "应用播报语速: ${String.format("%.1fx", speechRate)}")
+                SpeechEngineMode.SYSTEM -> trySpeakWithSystemTts(text, volume)
 
-                // 尝试不同的播报方式
-                val result = textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
-                Log.d(TAG, "播报结果: $result")
-                
-                // 添加延迟，确保播报完成
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    Log.d(TAG, "播报延迟检查")
-                }, 100)
-            } catch (e: Exception) {
-                Log.e(TAG, "播报失败", e)
-                Toast.makeText(this, "语音播报失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                SpeechEngineMode.BUNDLED_MATCHA -> withContext(Dispatchers.IO) {
+                    trySpeakWithBundledEngine(text, volume)
+                }
             }
-        } else {
-            Toast.makeText(this, "语音播报未初始化", Toast.LENGTH_SHORT).show()
+
+            if (!spoken) {
+                showSpeechUnavailableMessage(mode)
+            }
         }
     }
-    
+
     private fun openWechatVideo(contact: Contact) {
         Log.d(TAG, "发起微信视频通话: ${contact.wechatNote}")
         
@@ -1411,3 +1599,7 @@ class CommonAppAdapter(
         }
     }
 }
+
+
+
+

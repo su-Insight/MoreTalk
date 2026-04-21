@@ -15,4 +15,5 @@
 local.properties
 .idea/
 .claude/
-CHANGELOG.md
+.gradle-user-home/
+third_party/sherpa-onnx/_classes.jar
