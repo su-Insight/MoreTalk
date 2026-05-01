@@ -31,6 +31,8 @@ import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.marginEnd
+import androidx.core.view.marginStart
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.GridLayoutManager
@@ -83,6 +85,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var locationText: TextView
     private lateinit var settingsIcon: ImageView
     private lateinit var weatherCard: CardView
+    private val dateHeaderMaxTextSizeSp = 34f
+    private val dateHeaderMinTextSizeSp = 20f
 
     private lateinit var locationManager: LocationManager
     private lateinit var textToSpeech: TextToSpeech
@@ -255,6 +259,33 @@ class MainActivity : AppCompatActivity() {
         loadContacts()
         
         Log.d(TAG, "onResume 完成")
+    }
+
+    override fun onBackPressed() {
+        if (shouldConsumeBackPress()) {
+            Log.d(TAG, "默认桌面根页面拦截返回键，避免重复回到桌面")
+            return
+        }
+        super.onBackPressed()
+    }
+
+    private fun shouldConsumeBackPress(): Boolean {
+        if (!isTaskRoot) return false
+        if (intent?.action != Intent.ACTION_MAIN) return false
+        if (intent?.hasCategory(Intent.CATEGORY_HOME) != true) return false
+        return isAppDefaultLauncher()
+    }
+
+    private fun isAppDefaultLauncher(): Boolean {
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+        }
+        val resolveInfo = packageManager.resolveActivity(
+            homeIntent,
+            PackageManager.MATCH_DEFAULT_ONLY
+        ) ?: return false
+
+        return resolveInfo.activityInfo?.packageName == packageName
     }
 
     private fun preloadBundledSpeechEngine() {
@@ -485,6 +516,9 @@ class MainActivity : AppCompatActivity() {
         dateTypeText = weatherComponent.findViewById(R.id.dateTypeText)
         dateText = weatherComponent.findViewById(R.id.dateText)
         weekText = weatherComponent.findViewById(R.id.weekText)
+        dateTypeText.isSingleLine = true
+        dateText.isSingleLine = true
+        weekText.isSingleLine = true
         weatherText = weatherComponent.findViewById(R.id.weatherText)
         temperatureText = weatherComponent.findViewById(R.id.temperatureText)
         weatherDetailText = weatherComponent.findViewById(R.id.weatherDetailText)
@@ -527,7 +561,7 @@ class MainActivity : AppCompatActivity() {
         recyclerViewContacts.layoutManager = gridLayoutManager
         contactsAdapter = HomeContactAdapter(contacts, object : HomeContactAdapter.OnContactClickListener {
             override fun onContactClick(contact: Contact) {
-                showContactActionDialog(contact)
+                handleContactClick(contact)
             }
         })
         recyclerViewContacts.adapter = contactsAdapter
@@ -871,6 +905,41 @@ class MainActivity : AppCompatActivity() {
             weekText.text = weekDay
             lunarDateText = "阳历${year}年${month}月${day}日"
         }
+
+        weatherCard.post { adjustDateHeaderTextSize() }
+    }
+
+    private fun adjustDateHeaderTextSize() {
+        val maxSize = GlobalScaleManager.getScaledValue(this, dateHeaderMaxTextSizeSp)
+        val minSize = GlobalScaleManager.getScaledValue(this, dateHeaderMinTextSizeSp)
+
+        dateTypeText.textSize = maxSize
+        dateText.textSize = maxSize
+        weekText.textSize = maxSize
+
+        val availableWidth = settingsIcon.left - dateTypeText.left - dpToPx(8f)
+        if (availableWidth <= 0) return
+
+        val totalTextWidth =
+            dateTypeText.paint.measureText(dateTypeText.text.toString()) +
+            dateText.paint.measureText(dateText.text.toString()) +
+            weekText.paint.measureText(weekText.text.toString()) +
+            dateText.marginStart.toFloat() +
+            dateText.marginEnd.toFloat() +
+            weekText.marginStart.toFloat() +
+            weekText.marginEnd.toFloat()
+
+        if (totalTextWidth <= availableWidth) return
+
+        val scale = availableWidth / totalTextWidth
+        val adjustedSize = (maxSize * scale).coerceIn(minSize, maxSize)
+        dateTypeText.textSize = adjustedSize
+        dateText.textSize = adjustedSize
+        weekText.textSize = adjustedSize
+    }
+
+    private fun dpToPx(dp: Float): Int {
+        return (dp * resources.displayMetrics.density).toInt()
     }
 
     private fun fetchWeather(city: String, shouldSpeak: Boolean = false) {
@@ -1195,10 +1264,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun handleContactClick(contact: Contact) {
+        when (getAvailableContactActionCount(contact)) {
+            0 -> {
+                Toast.makeText(this, "该联系人未配置任何操作", Toast.LENGTH_SHORT).show()
+            }
+            1 -> {
+                triggerSingleContactAction(contact)
+            }
+            else -> {
+                showContactActionDialog(contact)
+            }
+        }
+    }
+
+    private fun getAvailableContactActionCount(contact: Contact): Int {
+        var count = 0
+        if (contact.hasWechatVideo) count++
+        if (contact.hasWechatVoice) count++
+        if (contact.hasPhoneCall) count++
+        return count
+    }
+
+    private fun triggerSingleContactAction(contact: Contact) {
+        when {
+            contact.hasWechatVideo -> openWechatVideo(contact)
+            contact.hasWechatVoice -> openWechatVoice(contact)
+            contact.hasPhoneCall -> makePhoneCall(contact)
+        }
+    }
+
     private fun showContactActionDialog(contact: Contact) {
-        // 检查是否配置了任何操作
-        val hasAnyAction = contact.hasWechatVideo || contact.hasWechatVoice || contact.hasPhoneCall
-        if (!hasAnyAction) {
+        if (getAvailableContactActionCount(contact) == 0) {
             Toast.makeText(this, "该联系人未配置任何操作", Toast.LENGTH_SHORT).show()
             return
         }

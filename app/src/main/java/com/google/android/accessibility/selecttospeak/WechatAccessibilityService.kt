@@ -52,6 +52,7 @@ class SelectToSpeakService : AccessibilityService() {
     private val isProcessing = AtomicBoolean(false)
     private var retryCount = 0
     private var navigationAttempts = 0
+    private var lastWindowClassName = ""
 
     // 主动触发下一步的延迟任务
     private var nextStepRunnable: Runnable? = null
@@ -68,6 +69,7 @@ class SelectToSpeakService : AccessibilityService() {
             return
         }
 
+        lastWindowClassName = currentActivity
         Log.d(TAG, "Current Activity: $currentActivity, Step: ${WeChatData.index}")
 
         // 如果正在处理，跳过新事件（使用原子操作确保线程安全）
@@ -427,6 +429,7 @@ class SelectToSpeakService : AccessibilityService() {
                 if (!isChatPage(currentActivity)) {
                     Log.d(TAG, "不在聊天界面，等待")
                     setProcessing(false)
+                    scheduleNextStep(300)
                     return@launch
                 }
 
@@ -438,7 +441,7 @@ class SelectToSpeakService : AccessibilityService() {
                     val clickResult = moreNode.click()
                     if (!clickResult) {
                         Log.e(TAG, "点击更多按钮失败，重试")
-                        handleRetry("点击更多按钮失败", 4)
+                        handleRetry("点击更多按钮失败", 5)
                         setProcessing(false)
                         return@launch
                     }
@@ -449,7 +452,7 @@ class SelectToSpeakService : AccessibilityService() {
                     scheduleNextStep(500)
                     return@launch
                 } else {
-                    handleRetry("未找到更多按钮", 4)
+                    handleRetry("未找到更多按钮", 5)
                     setProcessing(false)
                 }
             } catch (e: Exception) {
@@ -845,6 +848,7 @@ class SelectToSpeakService : AccessibilityService() {
     private fun resetAndStop() {
         WeChatData.updateIndex(0)
         WeChatData.updateValue("")
+        lastWindowClassName = ""
         resetRetryAndNavigation()
         cancelNextStep()
     }
@@ -911,7 +915,7 @@ class SelectToSpeakService : AccessibilityService() {
         nextStepRunnable = Runnable {
             if (!isProcessing.get() && WeChatData.index > 0 && WeChatData.index <= 7) {
                 Log.d(TAG, ">>> 主动触发步骤 ${WeChatData.index} <<<")
-                val currentActivity = rootInActiveWindow?.packageName?.toString() ?: ""
+                val currentActivity = lastWindowClassName
                 when (WeChatData.index) {
                     1 -> processStep1(currentActivity)
                     2 -> processStep2(currentActivity)
