@@ -56,7 +56,11 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnClearDefaultLauncher: Button
 
     private lateinit var btnCommonApps: Button
+    private lateinit var switchDirectCall: Switch
     private lateinit var switchWeather: Switch
+    private lateinit var detailDisplayGroup: RadioGroup
+    private lateinit var radioDetailBattery: RadioButton
+    private lateinit var radioDetailWeather: RadioButton
     private lateinit var seekBarWeatherVol: SeekBar
     private lateinit var textWeatherVol: TextView
     private lateinit var seekBarSpeechRate: SeekBar
@@ -69,6 +73,10 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var textDateStyle: TextView
     private lateinit var textCommonAppsTitle: TextView
     private lateinit var textContactsTitle: TextView
+    private lateinit var textDirectCallTitle: TextView
+    private lateinit var textDirectCallDesc: TextView
+    private lateinit var textDetailDisplayTitle: TextView
+    private lateinit var textDetailDisplayDesc: TextView
     private lateinit var textIconSizeTitle: TextView
     private lateinit var textWeatherTitle: TextView
     private lateinit var textSpeechRateTitle: TextView
@@ -122,7 +130,11 @@ class SettingsActivity : AppCompatActivity() {
         btnClearDefaultLauncher = findViewById(R.id.btnClearDefaultLauncher)
 
         btnCommonApps = findViewById(R.id.btnCommonApps)
+        switchDirectCall = findViewById(R.id.switchDirectCall)
         switchWeather = findViewById(R.id.switchWeather)
+        detailDisplayGroup = findViewById(R.id.detailDisplayGroup)
+        radioDetailBattery = findViewById(R.id.radioDetailBattery)
+        radioDetailWeather = findViewById(R.id.radioDetailWeather)
         seekBarWeatherVol = findViewById(R.id.seekBarWeatherVol)
         textWeatherVol = findViewById(R.id.textWeatherVol)
         seekBarSpeechRate = findViewById(R.id.seekBarSpeechRate)
@@ -135,6 +147,10 @@ class SettingsActivity : AppCompatActivity() {
         textDateStyle = findViewById(R.id.textDateStyle)
         textCommonAppsTitle = findViewById(R.id.textCommonAppsTitle)
         textContactsTitle = findViewById(R.id.textContactsTitle)
+        textDirectCallTitle = findViewById(R.id.textDirectCallTitle)
+        textDirectCallDesc = findViewById(R.id.textDirectCallDesc)
+        textDetailDisplayTitle = findViewById(R.id.textDetailDisplayTitle)
+        textDetailDisplayDesc = findViewById(R.id.textDetailDisplayDesc)
         textIconSizeTitle = findViewById(R.id.textIconSizeTitle)
         textWeatherTitle = findViewById(R.id.textWeatherTitle)
         textSpeechRateTitle = findViewById(R.id.textSpeechRateTitle)
@@ -160,6 +176,14 @@ class SettingsActivity : AppCompatActivity() {
 
         val weatherEnabled = prefs.getBoolean(KEY_WEATHER_ENABLED, true)
         switchWeather.isChecked = weatherEnabled
+
+        val directCallEnabled = prefs.getBoolean(KEY_DIRECT_CALL_ENABLED, true)
+        switchDirectCall.isChecked = directCallEnabled
+
+        when (prefs.getString(KEY_HOME_DETAIL_MODE, VALUE_HOME_DETAIL_BATTERY)) {
+            VALUE_HOME_DETAIL_WEATHER -> radioDetailWeather.isChecked = true
+            else -> radioDetailBattery.isChecked = true
+        }
 
         val weatherVolume = prefs.getInt(KEY_WEATHER_VOLUME, 50)
         seekBarWeatherVol.progress = weatherVolume
@@ -242,6 +266,29 @@ class SettingsActivity : AppCompatActivity() {
 
         btnContacts.setOnClickListener {
             startActivity(Intent(this, ContactsActivity::class.java))
+        }
+
+        switchDirectCall.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(KEY_DIRECT_CALL_ENABLED, isChecked).apply()
+            Toast.makeText(
+                this,
+                if (isChecked) "已开启单一通话方式直接拨打" else "已关闭单一通话方式直接拨打",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        detailDisplayGroup.setOnCheckedChangeListener { _, checkedId ->
+            val detailMode = if (checkedId == R.id.radioDetailWeather) {
+                VALUE_HOME_DETAIL_WEATHER
+            } else {
+                VALUE_HOME_DETAIL_BATTERY
+            }
+            prefs.edit().putString(KEY_HOME_DETAIL_MODE, detailMode).apply()
+            Toast.makeText(
+                this,
+                if (detailMode == VALUE_HOME_DETAIL_BATTERY) "首页已切换为显示电量" else "首页已切换为显示天气详细数据",
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
         switchWeather.setOnCheckedChangeListener { _, isChecked ->
@@ -459,6 +506,8 @@ class SettingsActivity : AppCompatActivity() {
         textDateStyle.textSize = scaledTitleSize
         textCommonAppsTitle.textSize = scaledTitleSize
         textContactsTitle.textSize = scaledTitleSize
+        textDirectCallTitle.textSize = scaledTitleSize
+        textDetailDisplayTitle.textSize = scaledTitleSize
         textIconSizeTitle.textSize = scaledTitleSize
         textWeatherTitle.textSize = scaledTitleSize
         textSpeechEngineTitle.textSize = scaledTitleSize
@@ -469,11 +518,15 @@ class SettingsActivity : AppCompatActivity() {
         radioSpeechAuto.textSize = scaledOptionSize
         radioSpeechSystem.textSize = scaledOptionSize
         radioSpeechBundled.textSize = scaledOptionSize
+        radioDetailBattery.textSize = scaledOptionSize
+        radioDetailWeather.textSize = scaledOptionSize
         textIconSize.textSize = scaledOptionSize
         textWeatherVol.textSize = scaledOptionSize
         textCurrentSpeechEngine.textSize = scaledOptionSize
         textBundledSpeechModel.textSize = scaledOptionSize
         textNoCommonApps.textSize = scaledOptionSize
+        textDirectCallDesc.textSize = GlobalScaleManager.getScaledValue(this, 16f)
+        textDetailDisplayDesc.textSize = GlobalScaleManager.getScaledValue(this, 16f)
 
         btnSetDefaultLauncher.textSize = scaledOptionSize
         btnClearDefaultLauncher.textSize = scaledOptionSize
@@ -492,6 +545,10 @@ class SettingsActivity : AppCompatActivity() {
         private const val VALUE_SOLAR = "solar"
         private const val KEY_WEATHER_ENABLED = "weather_enabled"
         private const val KEY_WEATHER_VOLUME = "weather_volume"
+        private const val KEY_DIRECT_CALL_ENABLED = "direct_call_enabled"
+        private const val KEY_HOME_DETAIL_MODE = "home_detail_mode"
+        private const val VALUE_HOME_DETAIL_BATTERY = "battery"
+        private const val VALUE_HOME_DETAIL_WEATHER = "weather"
         private const val KEY_SPEECH_RATE = "speech_rate"
         private const val KEY_COMMON_APPS = "common_apps"
         private const val KEY_APP_ORDERS = "app_orders"

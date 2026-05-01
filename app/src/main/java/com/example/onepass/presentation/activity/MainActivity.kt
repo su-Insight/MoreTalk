@@ -2,13 +2,18 @@
 
 import android.Manifest
 import android.animation.ObjectAnimator
+import android.content.res.ColorStateList
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.location.LocationManager as AndroidLocationManager
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.Rect
+import android.os.BatteryManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -82,11 +87,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var weatherText: TextView
     private lateinit var temperatureText: TextView
     private lateinit var weatherDetailText: TextView
+    private lateinit var batteryIcon: ImageView
     private lateinit var locationText: TextView
     private lateinit var settingsIcon: ImageView
     private lateinit var weatherCard: CardView
     private val dateHeaderMaxTextSizeSp = 34f
     private val dateHeaderMinTextSizeSp = 20f
+    private val batteryLowColor by lazy { ContextCompat.getColor(this, android.R.color.holo_red_dark) }
+    private val batteryMediumColor by lazy { ContextCompat.getColor(this, android.R.color.holo_orange_dark) }
+    private val batteryHighColor by lazy { ContextCompat.getColor(this, android.R.color.holo_green_dark) }
+    private val detailDefaultColor by lazy { ContextCompat.getColor(this, android.R.color.black) }
 
     private lateinit var locationManager: LocationManager
     private lateinit var textToSpeech: TextToSpeech
@@ -96,7 +106,13 @@ class MainActivity : AppCompatActivity() {
     private var speechJob: Job? = null
     private var currentCity = AppConfig.CITY
     private var isRefreshing = false
+    private var isBatteryReceiverRegistered = false
     private val handler = Handler(Looper.getMainLooper())
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            updateBatteryStatus(intent)
+        }
+    }
     private val refreshRunnable = object : Runnable {
         override fun run() {
             refreshWeather()
@@ -127,7 +143,13 @@ class MainActivity : AppCompatActivity() {
     private val VALUE_SOLAR = "solar"
     private val KEY_ICON_SIZE = "icon_size"
     private val KEY_SPEECH_RATE = "speech_rate"
+    private val KEY_HOME_DETAIL_MODE = "home_detail_mode"
+    private val VALUE_HOME_DETAIL_BATTERY = "battery"
+    private val VALUE_HOME_DETAIL_WEATHER = "weather"
     private var lastWeatherInfo = ""
+    private var lastBatteryStatusText = "电量 --"
+    private var lastBatteryStatusColor: Int? = null
+    private var lastWeatherDetailText = "湿度 -- · 风力 -- · 风向 --"
 
     /**
      * 获取保存的语速设置
@@ -144,6 +166,7 @@ class MainActivity : AppCompatActivity() {
     private val COMMON_APPS_PREFS = "common_apps_prefs"
     private val KEY_COMMON_APPS = "common_apps"
     private val KEY_APP_ORDERS = "app_orders"
+    private val KEY_DIRECT_CALL_ENABLED = "direct_call_enabled"
     private lateinit var commonAppsCard: CardView
     private lateinit var commonAppTitle: TextView
     private lateinit var recyclerViewCommonApps: RecyclerView
@@ -253,12 +276,19 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume 开始")
-        
+
+        registerBatteryReceiverIfNeeded()
+        updateBatteryStatus()
         updateDate()
         loadCommonApps()
         loadContacts()
-        
+
         Log.d(TAG, "onResume 完成")
+    }
+
+    override fun onPause() {
+        unregisterBatteryReceiverIfNeeded()
+        super.onPause()
     }
 
     override fun onBackPressed() {
@@ -522,6 +552,7 @@ class MainActivity : AppCompatActivity() {
         weatherText = weatherComponent.findViewById(R.id.weatherText)
         temperatureText = weatherComponent.findViewById(R.id.temperatureText)
         weatherDetailText = weatherComponent.findViewById(R.id.weatherDetailText)
+        batteryIcon = weatherComponent.findViewById(R.id.batteryIcon)
         locationText = weatherComponent.findViewById(R.id.locationText)
         settingsIcon = weatherComponent.findViewById(R.id.settingsIcon)
         weatherCard = weatherComponent as CardView
@@ -910,8 +941,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun adjustDateHeaderTextSize() {
-        val maxSize = GlobalScaleManager.getScaledValue(this, dateHeaderMaxTextSizeSp)
-        val minSize = GlobalScaleManager.getScaledValue(this, dateHeaderMinTextSizeSp)
+        val maxSize = dateHeaderMaxTextSizeSp
+        val minSize = dateHeaderMinTextSizeSp
 
         dateTypeText.textSize = maxSize
         dateText.textSize = maxSize
@@ -940,6 +971,57 @@ class MainActivity : AppCompatActivity() {
 
     private fun dpToPx(dp: Float): Int {
         return (dp * resources.displayMetrics.density).toInt()
+    }
+
+    private fun registerBatteryReceiverIfNeeded() {
+        if (isBatteryReceiverRegistered) return
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        isBatteryReceiverRegistered = true
+    }
+
+    private fun unregisterBatteryReceiverIfNeeded() {
+        if (!isBatteryReceiverRegistered) return
+        unregisterReceiver(batteryReceiver)
+        isBatteryReceiverRegistered = false
+    }
+
+    private fun updateBatteryStatus(intent: Intent? = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))) {
+        val batteryIntent = intent ?: run {
+            lastBatteryStatusText = "电量 --"
+            lastBatteryStatusColor = detailDefaultColor
+            renderDetailLine()
+            return
+        }
+
+        val level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        if (level < 0 || scale <= 0) {
+            lastBatteryStatusText = "电量 --"
+            lastBatteryStatusColor = detailDefaultColor
+            renderDetailLine()
+            return
+        }
+
+        val percentage = (level * 100 / scale)
+        val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val batteryColor = when {
+            percentage < 20 -> batteryLowColor
+            percentage <= 40 -> batteryMediumColor
+            else -> batteryHighColor
+        }
+        val batteryLabel = when (status) {
+            BatteryManager.BATTERY_STATUS_CHARGING -> "充电中"
+            BatteryManager.BATTERY_STATUS_FULL -> "已充满"
+            else -> ""
+        }
+
+        lastBatteryStatusText = if (batteryLabel.isBlank()) {
+            "电量 ${percentage}%"
+        } else {
+            "电量 ${percentage}% · $batteryLabel"
+        }
+        lastBatteryStatusColor = batteryColor
+        renderDetailLine()
     }
 
     private fun fetchWeather(city: String, shouldSpeak: Boolean = false) {
@@ -1020,9 +1102,10 @@ class MainActivity : AppCompatActivity() {
         val weatherEmoji = getWeatherEmoji(weather.weather)
         weatherText.text = "$weatherEmoji ${weather.weather}"
         temperatureText.text = "${weather.temperature}°C"
-        weatherDetailText.text = "湿度: ${weather.humidity}% | 风力: ${weather.windpower} | 风向: ${weather.winddirection}"
-        
         locationText.text = weather.city
+        val formattedWindDirection = formatWindDirection(weather.winddirection)
+        lastWeatherDetailText = "湿度 ${weather.humidity}% · 风力 ${weather.windpower} · $formattedWindDirection"
+        renderDetailLine()
     }
 
     private fun getWeatherEmoji(weather: String): String {
@@ -1137,11 +1220,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getSpokenWindDirection(direction: String): String {
-        val normalized = direction.trim()
-        if (normalized.isEmpty()) {
-            return "无风"
+        val formattedDirection = formatWindDirection(direction)
+        return if (formattedDirection == "无风") "无风" else formattedDirection
+    }
+
+    private fun formatWindDirection(direction: String): String {
+        return when (direction.trim()) {
+            "" -> "无风"
+            "东" -> "东风"
+            "南" -> "南风"
+            "西" -> "西风"
+            "北" -> "北风"
+            "东北" -> "东北风"
+            "东南" -> "东南风"
+            "西北" -> "西北风"
+            "西南" -> "西南风"
+            "无持续风向" -> "无持续风向"
+            "旋转不定" -> "旋转风"
+            else -> if (direction.trim().endsWith("风")) direction.trim() else "${direction.trim()}风"
         }
-        return if (normalized.endsWith("风")) normalized else "${normalized}风"
     }
 
     private fun speakWeather(weather: LiveWeather) {
@@ -1216,7 +1313,49 @@ class MainActivity : AppCompatActivity() {
     private fun showError() {
         weatherText.text = "获取失败"
         temperatureText.text = "--"
-        weatherDetailText.text = "请检查网络连接"
+        lastWeatherDetailText = "天气详情获取失败"
+        renderDetailLine()
+    }
+
+    private fun renderDetailLine() {
+        if (getHomeDetailMode() == VALUE_HOME_DETAIL_WEATHER) {
+            showWeatherDetailLine()
+        } else {
+            showBatteryDetailLine()
+        }
+    }
+
+    private fun getHomeDetailMode(): String {
+        return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_HOME_DETAIL_MODE, VALUE_HOME_DETAIL_BATTERY)
+            ?: VALUE_HOME_DETAIL_BATTERY
+    }
+
+    private fun showBatteryDetailLine() {
+        batteryIcon.visibility = View.VISIBLE
+        updateDetailTextSpacing(hasIcon = true)
+        weatherDetailText.text = lastBatteryStatusText
+        weatherDetailText.textSize = 24f
+        weatherDetailText.setTypeface(weatherDetailText.typeface, Typeface.BOLD)
+
+        val detailColor = lastBatteryStatusColor ?: detailDefaultColor
+        weatherDetailText.setTextColor(detailColor)
+        batteryIcon.imageTintList = ColorStateList.valueOf(detailColor)
+    }
+
+    private fun showWeatherDetailLine() {
+        batteryIcon.visibility = View.GONE
+        updateDetailTextSpacing(hasIcon = false)
+        weatherDetailText.text = lastWeatherDetailText
+        weatherDetailText.textSize = 18f
+        weatherDetailText.setTypeface(weatherDetailText.typeface, Typeface.BOLD)
+        weatherDetailText.setTextColor(locationText.currentTextColor)
+    }
+
+    private fun updateDetailTextSpacing(hasIcon: Boolean) {
+        val layoutParams = weatherDetailText.layoutParams as? LinearLayout.LayoutParams ?: return
+        layoutParams.marginStart = if (hasIcon) dpToPx(8f) else 0
+        weatherDetailText.layoutParams = layoutParams
     }
 
     private fun loadContacts() {
@@ -1270,12 +1409,21 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "该联系人未配置任何操作", Toast.LENGTH_SHORT).show()
             }
             1 -> {
-                triggerSingleContactAction(contact)
+                if (isDirectCallEnabled()) {
+                    triggerSingleContactAction(contact)
+                } else {
+                    showContactActionDialog(contact)
+                }
             }
             else -> {
                 showContactActionDialog(contact)
             }
         }
+    }
+
+    private fun isDirectCallEnabled(): Boolean {
+        return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DIRECT_CALL_ENABLED, true)
     }
 
     private fun getAvailableContactActionCount(contact: Contact): Int {

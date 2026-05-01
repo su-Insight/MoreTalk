@@ -101,17 +101,34 @@
             app:layout_constraintTop_toBottomOf="@id/dateText"
             app:layout_constraintWidth_default="wrap" />
 
-        <TextView
-            android:id="@+id/weatherDetailText"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/batteryContainer"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="湿度: 65% | 风力: 3级 | 风向: 东北"
-            android:textColor="#666666"
-            android:textSize="16sp"
-            app:layout_constraintEnd_toEndOf="parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/weatherText" />
+            app:layout_constraintTop_toBottomOf="@id/weatherText">
+
+            <ImageView
+                android:id="@+id/batteryIcon"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_battery_status" />
+
+            <TextView
+                android:id="@+id/weatherDetailText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="电量 100%"
+                android:textColor="#666666"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

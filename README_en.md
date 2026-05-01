@@ -85,19 +85,20 @@
 
 
 ## 🌐Operation Interface - Test Device (MI 12s)
-<img src="https://github.com/user-attachments/assets/d62c2c73-cf92-419a-91a1-e673848a0ca0" height="500" />
-<img src="https://github.com/user-attachments/assets/7c9c4774-0199-4b22-acf4-bd27d95a5600" height="500" />
-<img src="https://github.com/user-attachments/assets/c665dbad-a6c5-42e4-8c75-16ac0da6bb7e" height="500" />
-<img src="https://github.com/user-attachments/assets/8d4a131a-3a32-4ec9-82eb-db50460ded91" height="500" />
-<img src="https://github.com/user-attachments/assets/2ffa8571-e928-4100-b63c-5a5999df2102" height="500" />
-<img src="https://github.com/user-attachments/assets/5e3575f7-99ec-48c6-a6d7-054d1b5e60a4" height="500" />
+<img src="docs/images/item-001.png" height="500" />
+<img src="docs/images/item-002.png" height="500" />
+<img src="docs/images/item-003.png" height="500" />
+<img src="docs/images/item-004.png" height="500" />
+<img src="docs/images/item-005.png" height="500" />
+<img src="docs/images/item-006.png" height="500" />
+<img src="docs/images/item-007.png" height="500" />
 
 
 ## 🚀 Deployment & Installation
 
 ### ✨ Get the Latest Features & Optimization Notifications (Recommended)
 
-<img width="1872" height="476" alt="image" src="https://github.com/user-attachments/assets/b4c6bfde-0f01-43e9-83aa-dac7bbb2de26" />
+<img width="960" alt="MoreTalk Star guide" src="docs/images/star-guide.png" />
 
 
 ### 1. Developer Setup
@@ -166,3 +167,11 @@ It is recommended to set `singleInstance` for the `MainActivity` in `AndroidMani
 If you find this project meaningful, please give it a ⭐️ **Star**. It is the driving force for our continuous optimization.
 
 If you have better suggestions for simplification, feel free to submit a **Pull Request**.
+
+### ☕ Support the Project
+
+If this project has been helpful to you, you are also welcome to buy the author a coffee. Your support helps keep MoreTalk improving.
+
+<p align="center">
+  <img src="docs/images/donation-qr.jpg" alt="MoreTalk donation QR code" width="360" />
+</p>

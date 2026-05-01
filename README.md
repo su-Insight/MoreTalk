@@ -90,18 +90,19 @@
 ---
 
 ## 🌐运行界面-测试机型（MI 12s）
-<img src="https://github.com/user-attachments/assets/d62c2c73-cf92-419a-91a1-e673848a0ca0" height="500" />
-<img src="https://github.com/user-attachments/assets/7c9c4774-0199-4b22-acf4-bd27d95a5600" height="500" />
-<img src="https://github.com/user-attachments/assets/c665dbad-a6c5-42e4-8c75-16ac0da6bb7e" height="500" />
-<img src="https://github.com/user-attachments/assets/8d4a131a-3a32-4ec9-82eb-db50460ded91" height="500" />
-<img src="https://github.com/user-attachments/assets/2ffa8571-e928-4100-b63c-5a5999df2102" height="500" />
-<img src="https://github.com/user-attachments/assets/5e3575f7-99ec-48c6-a6d7-054d1b5e60a4" height="500" />
+<img src="docs/images/item-001.png" height="500" />
+<img src="docs/images/item-002.png" height="500" />
+<img src="docs/images/item-003.png" height="500" />
+<img src="docs/images/item-004.png" height="500" />
+<img src="docs/images/item-005.png" height="500" />
+<img src="docs/images/item-006.png" height="500" />
+<img src="docs/images/item-007.png" height="500" />
 
 ## 🚀 部署与安装说明
 
 ### ✨ 获取最新功能与优化通知(推荐)
 
-<img width="1872" height="476" alt="image" src="https://github.com/user-attachments/assets/b4c6bfde-0f01-43e9-83aa-dac7bbb2de26" />
+<img width="960" alt="MoreTalk Star 指引" src="docs/images/star-guide.png" />
 
 
 ### 1. 开发者部署
@@ -171,4 +172,12 @@
 
 如果您觉得这个项目有意义，请为它点一个 **⭐️ Star**，这是我们持续优化的动力。  
 如果您有更好的简化建议，欢迎提交 **Pull Request**。
+
+### ☕ 打赏支持
+
+如果这个项目刚好帮到了您，也欢迎请作者喝杯咖啡。您的鼓励会直接帮助这个项目继续打磨下去。
+
+<p align="center">
+  <img src="docs/images/donation-qr.jpg" alt="MoreTalk 打赏码" width="360" />
+</p>
 
