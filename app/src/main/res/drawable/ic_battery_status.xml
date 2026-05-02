@@ -1,20 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#00000000"
-        android:pathData="M4,8L18,8A2,2 0 0,1 20,10L20,14A2,2 0 0,1 18,16L4,16A2,2 0 0,1 2,14L2,10A2,2 0 0,1 4,8z"
-        android:strokeColor="#FF4CAF50"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="1.8" />
-    <path
-        android:fillColor="#FF4CAF50"
-        android:pathData="M5,10L17,10A1,1 0 0,1 18,11L18,13A1,1 0 0,1 17,14L5,14A1,1 0 0,1 4,13L4,11A1,1 0 0,1 5,10z" />
-    <path
-        android:fillColor="#FF4CAF50"
-        android:pathData="M21,10L22,10A1,1 0 0,1 23,11L23,13A1,1 0 0,1 22,14L21,14z" />
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/battery_outline" />
+
+    <item
+        android:left="4dp"
+        android:top="10dp"
+        android:right="6dp"
+        android:bottom="10dp">
+        <clip
+            android:clipOrientation="horizontal"
+            android:drawable="@drawable/battery_fill"
+            android:gravity="start" />
+    </item>
+</layer-list>

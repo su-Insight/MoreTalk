@@ -23,7 +23,7 @@ class CommonAppsActivity : AppCompatActivity() {
         private const val PREFS = "common_apps_prefs"
         private const val KEY_COMMON_APPS = "common_apps"
         private const val KEY_APP_ORDERS = "app_orders"
-        private const val MAX_COMMON_APPS = 6
+        private const val MAX_COMMON_APPS = 8
     }
     
     private lateinit var searchEdit: android.widget.EditText
@@ -300,7 +300,7 @@ class CommonAppsActivity : AppCompatActivity() {
                         // 检查是否超过最大选择数量
                         val selectedCount = apps.count { it.selected }
                         if (selectedCount >= MAX_COMMON_APPS) {
-                            Toast.makeText(itemView.context, "最多只能选择6个应用", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(itemView.context, "最多只能选择${MAX_COMMON_APPS}个应用", Toast.LENGTH_SHORT).show()
                             Log.d(TAG, "应用点击: ${app.label}, 已达到最大选择数量")
                             return@setOnClickListener
                         }
@@ -319,7 +319,7 @@ class CommonAppsActivity : AppCompatActivity() {
                         val selectedCount = apps.count { it.selected }
                         if (selectedCount >= MAX_COMMON_APPS) {
                             check.isChecked = false
-                            Toast.makeText(itemView.context, "最多只能选择6个应用", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(itemView.context, "最多只能选择${MAX_COMMON_APPS}个应用", Toast.LENGTH_SHORT).show()
                             Log.d(TAG, "应用切换: ${app.label}, 已达到最大选择数量")
                             return@setOnCheckedChangeListener
                         }

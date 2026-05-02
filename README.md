@@ -129,42 +129,6 @@
 
 ---
 
-## 📁 项目结构说明
-
-* **`ui/activity/MainActivity.kt`**：首页大图标布局、时间天气组件及状态管理。
-* **`service/WechatAccessibilityService.kt`**：**核心引擎**。处理 UI 树解析、自动跳转及手势模拟。
-* **`data/WeatherManager.kt`**：静默式天气获取逻辑，实现零干扰更新。
-* **`ui/adapter/ContactAdapter.kt`**：针对老年视觉优化的超大字版联系人列表。
-
----
-
-## 🎨 UI & Logo 设计理念
-
-* **极简主义**：全界面无阴影、无渐变，采用高对比度纯色块区分功能区，降低视觉认知负担。
-* **视觉导向**：Logo 采用融合的沟通气泡与 `+` 号设计，代表“更多的连接”与“更简单的沟通”。
-* **长辈友好**：所有点击热区均进行了加倍处理，适配老年人指尖触控习惯。
-
----
-
-## 💡 部署小提示：AndroidManifest 关键配置
-
-建议在 `AndroidManifest.xml` 中为 `MainActivity` 添加 `singleInstance` 配置，以确保系统的稳定性并防止长辈因误触返回键退出桌面：
-
-```xml
-<activity
-    android:name=".ui.activity.MainActivity"
-    android:launchMode="singleInstance"
-    android:label="@string/app_name"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.HOME" />
-        <category android:name="android.intent.category.DEFAULT" />
-    </intent-filter>
-</activity>
-```
----
-
 ## 🤝 贡献与反馈
 
 

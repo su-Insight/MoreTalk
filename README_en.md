@@ -123,43 +123,6 @@ To ensure the app controls WeChat smoothly, please help the elders complete thes
 - [ ] **Contact Entry**: When adding a contact, the **WeChat Alias** must exactly match the "Remark" set in the WeChat App (The system matches the first search result).
 - [ ] **Enable Location**: Ensure the app has "Always Allow" location permissions for automated weather updates.
 
----
-
-## 📁 Project Structure
-
-* **`ui/activity/MainActivity.kt`**: Desktop layout, time/weather widgets, and state management.
-* **`service/WechatAccessibilityService.kt`**: **The Core Engine**. Handles UI tree parsing, automated navigation, and gesture simulation.
-* **`data/WeatherManager.kt`**: Silent weather fetching logic for non-intrusive updates.
-* **`ui/adapter/ContactAdapter.kt`**: Extra-large font contact list optimized for senior vision.
-
----
-
-## 🎨 UI & Logo Design Philosophy
-
-* **Minimalism**: Clean interface without shadows or gradients. High-contrast solid colors distinguish functional areas to reduce cognitive load.
-* **Visual Guidance**: The logo combines a communication bubble with a `+` sign, representing "More Connection" and "Simpler Communication."
-* **Senior-Friendly**: All touch targets are enlarged to accommodate the tactile habits of the elderly.
-
----
-
-## 💡 Deployment Tip: AndroidManifest Configuration
-
-It is recommended to set `singleInstance` for the `MainActivity` in `AndroidManifest.xml` to ensure system stability and prevent users from accidentally exiting the desktop:
-
-```xml
-<activity
-    android:name=".ui.activity.MainActivity"
-    android:launchMode="singleInstance"
-    android:label="@string/app_name"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.HOME" />
-        <category android:name="android.intent.category.DEFAULT" />
-    </intent-filter>
-</activity>
-```
-
 ## 🤝 Contribution & Feedback
 
 **MoreTalk - Technology should not be a barrier for the elderly.**

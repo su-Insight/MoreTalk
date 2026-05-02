@@ -56,13 +56,14 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnClearDefaultLauncher: Button
 
     private lateinit var btnCommonApps: Button
-    private lateinit var switchDirectCall: Switch
     private lateinit var switchWeather: Switch
+    private lateinit var switchDirectCall: Switch
+    private lateinit var switchLowBatteryReminder: Switch
     private lateinit var detailDisplayGroup: RadioGroup
     private lateinit var radioDetailBattery: RadioButton
     private lateinit var radioDetailWeather: RadioButton
-    private lateinit var seekBarWeatherVol: SeekBar
-    private lateinit var textWeatherVol: TextView
+    private lateinit var seekBarBroadcastVolume: SeekBar
+    private lateinit var textBroadcastVolume: TextView
     private lateinit var seekBarSpeechRate: SeekBar
     private lateinit var textSpeechRate: TextView
     private lateinit var commonAppsScrollView: HorizontalScrollView
@@ -77,8 +78,13 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var textDirectCallDesc: TextView
     private lateinit var textDetailDisplayTitle: TextView
     private lateinit var textDetailDisplayDesc: TextView
+    private lateinit var textLowBatteryReminderTitle: TextView
+    private lateinit var textLowBatteryReminderDesc: TextView
+    private lateinit var textBroadcastVolumeTitle: TextView
+    private lateinit var textBroadcastVolumeDesc: TextView
     private lateinit var textIconSizeTitle: TextView
     private lateinit var textWeatherTitle: TextView
+    private lateinit var textWeatherDesc: TextView
     private lateinit var textSpeechRateTitle: TextView
     private lateinit var textSpeechEngineTitle: TextView
 
@@ -130,13 +136,14 @@ class SettingsActivity : AppCompatActivity() {
         btnClearDefaultLauncher = findViewById(R.id.btnClearDefaultLauncher)
 
         btnCommonApps = findViewById(R.id.btnCommonApps)
-        switchDirectCall = findViewById(R.id.switchDirectCall)
         switchWeather = findViewById(R.id.switchWeather)
+        switchDirectCall = findViewById(R.id.switchDirectCall)
+        switchLowBatteryReminder = findViewById(R.id.switchLowBatteryReminder)
         detailDisplayGroup = findViewById(R.id.detailDisplayGroup)
         radioDetailBattery = findViewById(R.id.radioDetailBattery)
         radioDetailWeather = findViewById(R.id.radioDetailWeather)
-        seekBarWeatherVol = findViewById(R.id.seekBarWeatherVol)
-        textWeatherVol = findViewById(R.id.textWeatherVol)
+        seekBarBroadcastVolume = findViewById(R.id.seekBarBroadcastVolume)
+        textBroadcastVolume = findViewById(R.id.textBroadcastVolume)
         seekBarSpeechRate = findViewById(R.id.seekBarSpeechRate)
         textSpeechRate = findViewById(R.id.textSpeechRate)
         commonAppsScrollView = findViewById(R.id.commonAppsScrollView)
@@ -151,8 +158,13 @@ class SettingsActivity : AppCompatActivity() {
         textDirectCallDesc = findViewById(R.id.textDirectCallDesc)
         textDetailDisplayTitle = findViewById(R.id.textDetailDisplayTitle)
         textDetailDisplayDesc = findViewById(R.id.textDetailDisplayDesc)
+        textLowBatteryReminderTitle = findViewById(R.id.textLowBatteryReminderTitle)
+        textLowBatteryReminderDesc = findViewById(R.id.textLowBatteryReminderDesc)
+        textBroadcastVolumeTitle = findViewById(R.id.textBroadcastVolumeTitle)
+        textBroadcastVolumeDesc = findViewById(R.id.textBroadcastVolumeDesc)
         textIconSizeTitle = findViewById(R.id.textIconSizeTitle)
         textWeatherTitle = findViewById(R.id.textWeatherTitle)
+        textWeatherDesc = findViewById(R.id.textWeatherDesc)
         textSpeechRateTitle = findViewById(R.id.textSpeechRateTitle)
         textSpeechEngineTitle = findViewById(R.id.textSpeechEngineTitle)
 
@@ -180,15 +192,17 @@ class SettingsActivity : AppCompatActivity() {
         val directCallEnabled = prefs.getBoolean(KEY_DIRECT_CALL_ENABLED, true)
         switchDirectCall.isChecked = directCallEnabled
 
+        val lowBatteryReminderEnabled = prefs.getBoolean(KEY_LOW_BATTERY_REMINDER_ENABLED, true)
+        switchLowBatteryReminder.isChecked = lowBatteryReminderEnabled
+
         when (prefs.getString(KEY_HOME_DETAIL_MODE, VALUE_HOME_DETAIL_BATTERY)) {
             VALUE_HOME_DETAIL_WEATHER -> radioDetailWeather.isChecked = true
             else -> radioDetailBattery.isChecked = true
         }
 
-        val weatherVolume = prefs.getInt(KEY_WEATHER_VOLUME, 50)
-        seekBarWeatherVol.progress = weatherVolume
-        textWeatherVol.text = "$weatherVolume%"
-        seekBarWeatherVol.isEnabled = weatherEnabled
+        val broadcastVolume = getSavedBroadcastVolume()
+        seekBarBroadcastVolume.progress = broadcastVolume
+        textBroadcastVolume.text = "$broadcastVolume%"
 
         val speechRateProgress = prefs.getInt(KEY_SPEECH_RATE, 50)
         seekBarSpeechRate.progress = speechRateProgress
@@ -268,6 +282,15 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, ContactsActivity::class.java))
         }
 
+        switchWeather.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(KEY_WEATHER_ENABLED, isChecked).apply()
+            Toast.makeText(
+                this,
+                if (isChecked) "已开启天气播报" else "已关闭天气播报",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         switchDirectCall.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(KEY_DIRECT_CALL_ENABLED, isChecked).apply()
             Toast.makeText(
@@ -291,28 +314,27 @@ class SettingsActivity : AppCompatActivity() {
             ).show()
         }
 
-        switchWeather.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_WEATHER_ENABLED, isChecked).apply()
-            seekBarWeatherVol.isEnabled = isChecked
+        switchLowBatteryReminder.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(KEY_LOW_BATTERY_REMINDER_ENABLED, isChecked).apply()
             Toast.makeText(
                 this,
-                if (isChecked) "已开启天气播报" else "已关闭天气播报",
+                if (isChecked) "已开启低电量提醒" else "已关闭低电量提醒",
                 Toast.LENGTH_SHORT
             ).show()
         }
 
-        seekBarWeatherVol.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        seekBarBroadcastVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                textWeatherVol.text = "$progress%"
+                textBroadcastVolume.text = "$progress%"
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                prefs.edit().putInt(KEY_WEATHER_VOLUME, seekBarWeatherVol.progress).apply()
+                saveBroadcastVolume(seekBarBroadcastVolume.progress)
                 Toast.makeText(
                     this@SettingsActivity,
-                    "天气播报音量已调整为 ${seekBarWeatherVol.progress}%",
+                    "播报音量已调整为 ${seekBarBroadcastVolume.progress}%",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -507,7 +529,9 @@ class SettingsActivity : AppCompatActivity() {
         textCommonAppsTitle.textSize = scaledTitleSize
         textContactsTitle.textSize = scaledTitleSize
         textDirectCallTitle.textSize = scaledTitleSize
+        textLowBatteryReminderTitle.textSize = scaledTitleSize
         textDetailDisplayTitle.textSize = scaledTitleSize
+        textBroadcastVolumeTitle.textSize = scaledTitleSize
         textIconSizeTitle.textSize = scaledTitleSize
         textWeatherTitle.textSize = scaledTitleSize
         textSpeechEngineTitle.textSize = scaledTitleSize
@@ -521,20 +545,37 @@ class SettingsActivity : AppCompatActivity() {
         radioDetailBattery.textSize = scaledOptionSize
         radioDetailWeather.textSize = scaledOptionSize
         textIconSize.textSize = scaledOptionSize
-        textWeatherVol.textSize = scaledOptionSize
+        textBroadcastVolume.textSize = scaledOptionSize
         textCurrentSpeechEngine.textSize = scaledOptionSize
         textBundledSpeechModel.textSize = scaledOptionSize
         textNoCommonApps.textSize = scaledOptionSize
         textDirectCallDesc.textSize = GlobalScaleManager.getScaledValue(this, 16f)
         textDetailDisplayDesc.textSize = GlobalScaleManager.getScaledValue(this, 16f)
+        textLowBatteryReminderDesc.textSize = GlobalScaleManager.getScaledValue(this, 16f)
+        textBroadcastVolumeDesc.textSize = GlobalScaleManager.getScaledValue(this, 16f)
+        textWeatherDesc.textSize = GlobalScaleManager.getScaledValue(this, 16f)
 
         btnSetDefaultLauncher.textSize = scaledOptionSize
         btnClearDefaultLauncher.textSize = scaledOptionSize
         btnCommonApps.textSize = scaledButtonSize
         btnContacts.textSize = scaledButtonSize
-
         // 语速显示固定大小，不随图标缩放变化。
         textSpeechRate.textSize = 24f
+    }
+
+    private fun getSavedBroadcastVolume(): Int {
+        return if (prefs.contains(KEY_BROADCAST_VOLUME)) {
+            prefs.getInt(KEY_BROADCAST_VOLUME, 50)
+        } else {
+            prefs.getInt(KEY_LEGACY_WEATHER_VOLUME, 50)
+        }
+    }
+
+    private fun saveBroadcastVolume(progress: Int) {
+        prefs.edit()
+            .putInt(KEY_BROADCAST_VOLUME, progress)
+            .putInt(KEY_LEGACY_WEATHER_VOLUME, progress)
+            .apply()
     }
 
     companion object {
@@ -544,11 +585,13 @@ class SettingsActivity : AppCompatActivity() {
         private const val VALUE_LUNAR = "lunar"
         private const val VALUE_SOLAR = "solar"
         private const val KEY_WEATHER_ENABLED = "weather_enabled"
-        private const val KEY_WEATHER_VOLUME = "weather_volume"
         private const val KEY_DIRECT_CALL_ENABLED = "direct_call_enabled"
         private const val KEY_HOME_DETAIL_MODE = "home_detail_mode"
         private const val VALUE_HOME_DETAIL_BATTERY = "battery"
         private const val VALUE_HOME_DETAIL_WEATHER = "weather"
+        private const val KEY_LOW_BATTERY_REMINDER_ENABLED = "low_battery_reminder_enabled"
+        private const val KEY_BROADCAST_VOLUME = "broadcast_volume"
+        private const val KEY_LEGACY_WEATHER_VOLUME = "weather_volume"
         private const val KEY_SPEECH_RATE = "speech_rate"
         private const val KEY_COMMON_APPS = "common_apps"
         private const val KEY_APP_ORDERS = "app_orders"

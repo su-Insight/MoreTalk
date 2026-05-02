@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.location.LocationManager as AndroidLocationManager
@@ -143,12 +144,20 @@ class MainActivity : AppCompatActivity() {
     private val VALUE_SOLAR = "solar"
     private val KEY_ICON_SIZE = "icon_size"
     private val KEY_SPEECH_RATE = "speech_rate"
+    private val KEY_WEATHER_ENABLED = "weather_enabled"
     private val KEY_HOME_DETAIL_MODE = "home_detail_mode"
     private val VALUE_HOME_DETAIL_BATTERY = "battery"
     private val VALUE_HOME_DETAIL_WEATHER = "weather"
+    private val KEY_BROADCAST_VOLUME = "broadcast_volume"
+    private val KEY_LEGACY_WEATHER_VOLUME = "weather_volume"
+    private val KEY_LOW_BATTERY_REMINDER_ENABLED = "low_battery_reminder_enabled"
+    private val KEY_BATTERY_WARNED_UNDER_20 = "battery_warned_under_20"
+    private val KEY_BATTERY_WARNED_UNDER_10 = "battery_warned_under_10"
+    private val KEY_BATTERY_WAS_CHARGING = "battery_was_charging"
     private var lastWeatherInfo = ""
     private var lastBatteryStatusText = "电量 --"
     private var lastBatteryStatusColor: Int? = null
+    private var lastBatteryLevel = 0
     private var lastWeatherDetailText = "湿度 -- · 风力 -- · 风向 --"
 
     /**
@@ -563,10 +572,14 @@ class MainActivity : AppCompatActivity() {
         recyclerViewCommonApps = findViewById(R.id.recyclerViewCommonApps)
         
         // 设置常用应用RecyclerView
+        val initialCommonAppIconSize = getCommonAppIconSize(
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_ICON_SIZE, 80)
+        )
         commonAppsAdapter = CommonAppAdapter(commonApps, { packageName ->
             launchApp(packageName)
-        }, 80)
+        }, initialCommonAppIconSize)
         recyclerViewCommonApps.adapter = commonAppsAdapter
+        recyclerViewCommonApps.isNestedScrollingEnabled = false
         
         // 设置默认的LayoutManager
         val defaultLayoutManager = GridLayoutManager(this, 3)
@@ -596,6 +609,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
         recyclerViewContacts.adapter = contactsAdapter
+        recyclerViewContacts.isNestedScrollingEnabled = false
 
         settingsIcon.setOnClickListener {
             val intent = Intent(this, SettingsActivity::class.java)
@@ -612,8 +626,9 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "正在刷新中，忽略点击")
             return
         }
-        
-        Log.d(TAG, "用户点击刷新天气（带播报）")
+
+        val shouldSpeak = isWeatherBroadcastEnabled()
+        Log.d(TAG, "用户点击刷新天气，播报开关: $shouldSpeak")
         
         // 检查定位服务是否开启
         if (!isLocationServiceEnabled()) {
@@ -646,9 +661,9 @@ class MainActivity : AppCompatActivity() {
         updateDate()
 
         if (currentCity == AppConfig.CITY) {
-            getLocationAndFetchWeather(true)
+            getLocationAndFetchWeather(shouldSpeak)
         } else {
-            fetchWeather(currentCity, true)
+            fetchWeather(currentCity, shouldSpeak)
         }
     }
     
@@ -986,9 +1001,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateBatteryStatus(intent: Intent? = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val batteryIntent = intent ?: run {
             lastBatteryStatusText = "电量 --"
             lastBatteryStatusColor = detailDefaultColor
+            lastBatteryLevel = 0
             renderDetailLine()
             return
         }
@@ -998,30 +1015,81 @@ class MainActivity : AppCompatActivity() {
         if (level < 0 || scale <= 0) {
             lastBatteryStatusText = "电量 --"
             lastBatteryStatusColor = detailDefaultColor
+            lastBatteryLevel = 0
             renderDetailLine()
             return
         }
 
         val percentage = (level * 100 / scale)
         val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL
         val batteryColor = when {
             percentage < 20 -> batteryLowColor
             percentage <= 40 -> batteryMediumColor
             else -> batteryHighColor
         }
-        val batteryLabel = when (status) {
-            BatteryManager.BATTERY_STATUS_CHARGING -> "充电中"
-            BatteryManager.BATTERY_STATUS_FULL -> "已充满"
-            else -> ""
-        }
 
-        lastBatteryStatusText = if (batteryLabel.isBlank()) {
-            "电量 ${percentage}%"
-        } else {
-            "电量 ${percentage}% · $batteryLabel"
+        maybeSpeakBatteryReminder(prefs, percentage, isCharging)
+
+        lastBatteryStatusText = when {
+            status == BatteryManager.BATTERY_STATUS_FULL -> "电量 100% · 已充满"
+            isCharging -> "电量 ${percentage}% · 充电中"
+            percentage <= 20 -> "电量低 ${percentage}% · 请充电"
+            percentage <= 40 -> "电量 ${percentage}% · 建议充电"
+            else -> {
+                "电量 ${percentage}%"
+            }
         }
         lastBatteryStatusColor = batteryColor
+        lastBatteryLevel = percentage.coerceIn(0, 100)
         renderDetailLine()
+    }
+
+    private fun maybeSpeakBatteryReminder(
+        prefs: SharedPreferences,
+        percentage: Int,
+        isCharging: Boolean
+    ) {
+        val wasCharging = prefs.getBoolean(KEY_BATTERY_WAS_CHARGING, false)
+        if (isCharging) {
+            if (!wasCharging) {
+                prefs.edit()
+                    .putBoolean(KEY_BATTERY_WARNED_UNDER_20, false)
+                    .putBoolean(KEY_BATTERY_WARNED_UNDER_10, false)
+                    .putBoolean(KEY_BATTERY_WAS_CHARGING, true)
+                    .apply()
+            }
+            return
+        }
+
+        if (wasCharging) {
+            prefs.edit().putBoolean(KEY_BATTERY_WAS_CHARGING, false).apply()
+        }
+
+        if (!prefs.getBoolean(KEY_LOW_BATTERY_REMINDER_ENABLED, true)) {
+            return
+        }
+
+        val reminderVolume = getBroadcastVolume()
+        val warnedUnder20 = prefs.getBoolean(KEY_BATTERY_WARNED_UNDER_20, false)
+        val warnedUnder10 = prefs.getBoolean(KEY_BATTERY_WARNED_UNDER_10, false)
+
+        when {
+            percentage <= 10 && !warnedUnder10 -> {
+                speakText("电量过低，请立即充电", reminderVolume)
+                prefs.edit()
+                    .putBoolean(KEY_BATTERY_WARNED_UNDER_20, true)
+                    .putBoolean(KEY_BATTERY_WARNED_UNDER_10, true)
+                    .apply()
+            }
+            percentage <= 20 && !warnedUnder20 -> {
+                speakText("电量不足，请及时充电", reminderVolume)
+                prefs.edit()
+                    .putBoolean(KEY_BATTERY_WARNED_UNDER_20, true)
+                    .apply()
+            }
+        }
     }
 
     private fun fetchWeather(city: String, shouldSpeak: Boolean = false) {
@@ -1176,7 +1244,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getSpokenWechatName(contact: Contact): String {
-        return normalizeNameForSpeech(contact.wechatNote.ifBlank { contact.name })
+        return normalizeNameForSpeech(contact.name.ifBlank { contact.wechatNote })
     }
 
     private fun getSpokenContactName(contact: Contact): String {
@@ -1242,18 +1310,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun speakWeather(weather: LiveWeather) {
-        val prefs = getSharedPreferences("OnePassPrefs", Context.MODE_PRIVATE)
-        val weatherEnabled = prefs.getBoolean("weather_enabled", true)
-        if (!weatherEnabled) {
+        if (!isWeatherBroadcastEnabled()) {
             return
         }
-
         val spokenDate = getSpokenDateLabel()
         val spokenWindDirection = getSpokenWindDirection(weather.winddirection)
         val speechText =
             "今天是$spokenDate，${weather.city}的天气是${weather.weather}，气温${weather.temperature}摄氏度，湿度${weather.humidity}%，风力${weather.windpower}级，${spokenWindDirection}"
-        val weatherVolume = prefs.getInt("weather_volume", 50) / 100.0f
-        speakText(speechText, weatherVolume)
+        speakText(speechText)
+    }
+
+    private fun isWeatherBroadcastEnabled(): Boolean {
+        return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_WEATHER_ENABLED, true)
     }
 
     private fun trySpeakWithSystemTts(text: String, volume: Float): Boolean {
@@ -1341,6 +1410,7 @@ class MainActivity : AppCompatActivity() {
         val detailColor = lastBatteryStatusColor ?: detailDefaultColor
         weatherDetailText.setTextColor(detailColor)
         batteryIcon.imageTintList = ColorStateList.valueOf(detailColor)
+        batteryIcon.setImageLevel(lastBatteryLevel * 100)
     }
 
     private fun showWeatherDetailLine() {
@@ -1507,7 +1577,21 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
     
-    private fun speakText(text: String, volume: Float = 1.0f) {
+    private fun getBroadcastVolume(): Float {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val progress = if (prefs.contains(KEY_BROADCAST_VOLUME)) {
+            prefs.getInt(KEY_BROADCAST_VOLUME, 50)
+        } else {
+            prefs.getInt(KEY_LEGACY_WEATHER_VOLUME, 50)
+        }
+        return progress.coerceIn(0, 100) / 100.0f
+    }
+
+    private fun speakText(text: String) {
+        speakText(text, getBroadcastVolume())
+    }
+
+    private fun speakText(text: String, volume: Float) {
         stopActiveSpeech()
         speechJob = CoroutineScope(Dispatchers.Main).launch {
             val mode = bundledSpeechSupport.getMode()
@@ -1695,14 +1779,7 @@ class MainActivity : AppCompatActivity() {
 
         // 从 SharedPreferences 加载图标大小设置
         val iconSizeValue = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_ICON_SIZE, 80)
-        // 将 0-100 的值映射到 100-240dp 的范围（增大图标大小）
-        val baseIconSize = 100 + (iconSizeValue * 140 / 100)
-        // 缩小30%后再增大30%和20%（即保持原来大小的91%），然后使用GlobalScaleManager进行缩放
-        val originalIconSize = (baseIconSize * 0.7 * 0.9 * 1.3 * 1.2).toInt()
-        // 使用GlobalScaleManager进行缩放
-        val iconSize = GlobalScaleManager.getScaledValue(this, originalIconSize)
-        val originalTextSize = (originalIconSize / 10).toFloat()
-        val textSize = GlobalScaleManager.getScaledValue(this, originalTextSize)
+        val iconSize = getCommonAppIconSize(iconSizeValue)
         
         // 控制标题大小
         val originalTitleSize = 23f // 原始大小23sp
@@ -1739,7 +1816,7 @@ class MainActivity : AppCompatActivity() {
             commonApps.clear()
             commonAppsAdapter = CommonAppAdapter(commonApps, { packageName ->
                 launchApp(packageName)
-            }, iconSizeValue)
+            }, iconSize)
             recyclerViewCommonApps.adapter = commonAppsAdapter
             return
         }
@@ -1779,21 +1856,26 @@ class MainActivity : AppCompatActivity() {
         // 创建新的适配器，传入缓存的iconSizeValue
         commonAppsAdapter = CommonAppAdapter(commonApps, { packageName ->
             launchApp(packageName)
-        }, iconSizeValue)
+        }, iconSize)
         recyclerViewCommonApps.adapter = commonAppsAdapter
         
-        // 根据宽度动态计算列数，考虑额外的间距
+        // 根据真实图标尺寸动态计算列数，避免 8 个应用时列数估算过于乐观导致拥挤
         recyclerViewCommonApps.post {
             val recyclerViewWidth = recyclerViewCommonApps.width
-            val originalImageSize = 128
-            val scaledImageSize = GlobalScaleManager.getScaledValue(this, originalImageSize)
-            val appItemWidth = scaledImageSize + 32 + 16
+            val horizontalSpace = (40 * resources.displayMetrics.density).toInt()
+            val appItemWidth = iconSize + horizontalSpace
             val spanCount = maxOf(1, minOf(4, recyclerViewWidth / appItemWidth))
             val gridLayoutManager = GridLayoutManager(this, spanCount)
             recyclerViewCommonApps.layoutManager = gridLayoutManager
         }
         
         Log.d(TAG, "常用应用加载完成")
+    }
+
+    private fun getCommonAppIconSize(iconSizeValue: Int): Int {
+        val baseIconSize = 100 + (iconSizeValue * 140 / 100)
+        val originalIconSize = (baseIconSize * 0.7 * 0.9 * 1.3 * 1.2).toInt()
+        return GlobalScaleManager.getScaledValue(this, originalIconSize)
     }
 }
 
@@ -1802,7 +1884,7 @@ data class CommonApp(val packageName: String, val appName: String, val appIcon: 
 class CommonAppAdapter(
     private val apps: List<CommonApp>, 
     private val listener: (String) -> Unit,
-    private val iconSizeValue: Int = 80
+    private val iconSize: Int
 ) : RecyclerView.Adapter<CommonAppAdapter.ViewHolder>() {
     
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -1812,7 +1894,7 @@ class CommonAppAdapter(
     
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val app = apps[position]
-        holder.bind(app, listener, iconSizeValue)
+        holder.bind(app, listener, iconSize)
     }
     
     override fun getItemCount(): Int = apps.size
@@ -1821,22 +1903,16 @@ class CommonAppAdapter(
         private val iconView: ImageView = itemView.findViewById(R.id.appIcon)
         private val nameView: TextView = itemView.findViewById(R.id.appName)
         
-        fun bind(app: CommonApp, listener: (String) -> Unit, iconSizeValue: Int) {
+        fun bind(app: CommonApp, listener: (String) -> Unit, iconSize: Int) {
             iconView.setImageDrawable(app.appIcon)
             nameView.text = app.appName
             
-            // 使用缓存的图标大小值
-            val baseIconSize = 100 + (iconSizeValue * 140 / 100)
-            val originalIconSize = (baseIconSize * 0.7 * 0.9 * 1.3 * 1.2).toInt()
-            val scaledIconSize = GlobalScaleManager.getScaledValue(itemView.context, originalIconSize)
             val iconParams = iconView.layoutParams
-            iconParams.width = scaledIconSize
-            iconParams.height = scaledIconSize
+            iconParams.width = iconSize
+            iconParams.height = iconSize
             iconView.layoutParams = iconParams
             
-            val originalTextSize = (originalIconSize / 10).toFloat()
-            val scaledTextSize = GlobalScaleManager.getScaledValue(itemView.context, originalTextSize)
-            nameView.textSize = scaledTextSize
+            nameView.textSize = iconSize / 10f
             
             itemView.setOnClickListener {
                 listener(app.packageName)
