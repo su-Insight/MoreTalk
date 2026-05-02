@@ -85,13 +85,19 @@
 
 
 ## 🌐Operation Interface - Test Device (MI 12s)
-<img src="docs/images/item-001.png" height="500" />
-<img src="docs/images/item-002.png" height="500" />
-<img src="docs/images/item-003.png" height="500" />
-<img src="docs/images/item-004.png" height="500" />
-<img src="docs/images/item-005.png" height="500" />
-<img src="docs/images/item-006.png" height="500" />
-<img src="docs/images/item-007.png" height="500" />
+<p align="center">
+  <img src="docs/images/item-001.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-002.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-003.png" height="420" hspace="10" vspace="8" />
+</p>
+<p align="center">
+  <img src="docs/images/item-004.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-005.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-006.png" height="420" hspace="10" vspace="8" />
+</p>
+<p align="center">
+  <img src="docs/images/item-007.png" height="420" hspace="10" vspace="8" />
+</p>
 
 
 ## 🚀 Deployment & Installation

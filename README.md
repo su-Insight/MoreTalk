@@ -90,13 +90,19 @@
 ---
 
 ## 🌐运行界面-测试机型（MI 12s）
-<img src="docs/images/item-001.png" height="500" />
-<img src="docs/images/item-002.png" height="500" />
-<img src="docs/images/item-003.png" height="500" />
-<img src="docs/images/item-004.png" height="500" />
-<img src="docs/images/item-005.png" height="500" />
-<img src="docs/images/item-006.png" height="500" />
-<img src="docs/images/item-007.png" height="500" />
+<p align="center">
+  <img src="docs/images/item-001.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-002.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-003.png" height="420" hspace="10" vspace="8" />
+</p>
+<p align="center">
+  <img src="docs/images/item-004.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-005.png" height="420" hspace="10" vspace="8" />
+  <img src="docs/images/item-006.png" height="420" hspace="10" vspace="8" />
+</p>
+<p align="center">
+  <img src="docs/images/item-007.png" height="420" hspace="10" vspace="8" />
+</p>
 
 ## 🚀 部署与安装说明
 
@@ -111,7 +117,7 @@
   ```bash
   git clone https://github.com/su-Insight/MoreTalk.git
   cd MoreTalk
-
+  
   ```
 
 * **构建安装**：在 Android Studio 中打开项目，等待 Gradle 同步，点击 Run 'app' 安装至真机（无障碍服务需真机环境）。
@@ -144,4 +150,3 @@
 <p align="center">
   <img src="docs/images/donation-qr.jpg" alt="MoreTalk 打赏码" width="360" />
 </p>
-
